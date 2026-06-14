@@ -64,7 +64,6 @@ cd Flashcard-app
 
 ```bash
 npm install
-<<<<<<< HEAD
 ```
 
 3. Start the Expo Development Server
@@ -83,7 +82,8 @@ Scan the QR code displayed by the Expo development server.
 
 The app should load on your device within a few seconds.
 
-Troubleshooting
+## Troubleshooting
+
 QR Code Does Not Work
 
 Try starting Expo with a tunnel connection:
