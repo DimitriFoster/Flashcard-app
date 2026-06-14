@@ -116,4 +116,4 @@ npx expo start --clear
 ```
 =======
 npx expo start
->>>>>>> 2793da2d6824c3cf366ccf36c85c99e6fe72ae1c
+
