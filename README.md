@@ -43,8 +43,67 @@ A lightweight flashcard application inspired by the spaced repetition system in 
 - TypeScript
 - React Native MMKV
 
-## Running Locally
+## Running the App
+
+Prerequisites
+
+Before running the app, install:
+
+Node.js (LTS version recommended)
+Git
+Expo Go on your Android or iPhone
+
+1. Clone the Repository
+
+```bash
+git clone https://github.com/DimitriFoster/Flashcard-app.git
+cd Flashcard-app
+```
+
+2. Install Dependencies
 
 ```bash
 npm install
-npx expo star
+```
+
+3. Start the Expo Development Server
+
+```bash
+npx expo start
+```
+
+This will open the Expo development server and display a QR code in the terminal and browser.
+
+4. Open the App on Your Phone
+Install Expo Go from the App Store or Google Play.
+Ensure your phone and computer are connected to the same Wi-Fi network.
+Open Expo Go.
+Scan the QR code displayed by the Expo development server.
+
+The app should load on your device within a few seconds.
+
+Troubleshooting
+QR Code Does Not Work
+
+Try starting Expo with a tunnel connection:
+
+```bash
+npx expo start --tunnel
+```
+
+Dependencies Are Missing
+
+Delete existing dependencies and reinstall:
+
+```bash
+rm -rf node_modules
+npm install
+```
+
+App Fails to Start
+
+Clear the Expo cache:
+
+```bash
+npx expo start --clear
+```
