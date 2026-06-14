@@ -9,6 +9,7 @@ import {
 import { SymbolView } from 'expo-symbols';
 import React from 'react';
 import { Pressable, useColorScheme, View, StyleSheet } from 'react-native';
+import type { Href } from 'expo-router';
 
 import { ExternalLink } from './external-link';
 import { ThemedText } from './themed-text';
@@ -27,6 +28,9 @@ export default function AppTabs() {
           </TabTrigger>
           <TabTrigger name="explore" href="/explore" asChild>
             <TabButton>Explore</TabButton>
+          </TabTrigger>
+          <TabTrigger name="review" href={'/review' as Href} asChild>
+            <TabButton>Review</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
@@ -55,10 +59,6 @@ export function CustomTabList(props: TabListProps) {
   return (
     <View {...props} style={styles.tabListContainer}>
       <ThemedView type="backgroundElement" style={styles.innerContainer}>
-        <ThemedText type="smallBold" style={styles.brandText}>
-          Expo Starter
-        </ThemedText>
-
         {props.children}
 
         <ExternalLink href="https://docs.expo.dev" asChild>
@@ -94,9 +94,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     gap: Spacing.two,
     maxWidth: MaxContentWidth,
-  },
-  brandText: {
-    marginRight: 'auto',
   },
   pressed: {
     opacity: 0.7,
