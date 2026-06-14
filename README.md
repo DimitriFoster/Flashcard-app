@@ -50,7 +50,9 @@ Prerequisites
 Before running the app, install:
 
 Node.js (LTS version recommended)
+
 Git
+
 Expo Go on your Android or iPhone
 
 1. Clone the Repository
@@ -64,7 +66,6 @@ cd Flashcard-app
 
 ```bash
 npm install
-<<<<<<< HEAD
 ```
 
 3. Start the Expo Development Server
@@ -75,15 +76,20 @@ npx expo start
 
 This will open the Expo development server and display a QR code in the terminal and browser.
 
-4. Open the App on Your Phone
+4. To open the app on your phone
+
 Install Expo Go from the App Store or Google Play.
+
 Ensure your phone and computer are connected to the same Wi-Fi network.
+
 Open Expo Go.
+
 Scan the QR code displayed by the Expo development server.
 
 The app should load on your device within a few seconds.
 
-Troubleshooting
+## Troubleshooting
+
 QR Code Does Not Work
 
 Try starting Expo with a tunnel connection:
@@ -110,4 +116,4 @@ npx expo start --clear
 ```
 =======
 npx expo start
->>>>>>> 2793da2d6824c3cf366ccf36c85c99e6fe72ae1c
+
