@@ -74,7 +74,7 @@ npx expo start
 
 This will open the Expo development server and display a QR code in the terminal and browser.
 
-4. Open the App on Your Phone
+4. To open the app on your phone
 Install Expo Go from the App Store or Google Play.
 Ensure your phone and computer are connected to the same Wi-Fi network.
 Open Expo Go.
