@@ -50,7 +50,9 @@ Prerequisites
 Before running the app, install:
 
 Node.js (LTS version recommended)
+
 Git
+
 Expo Go on your Android or iPhone
 
 1. Clone the Repository
