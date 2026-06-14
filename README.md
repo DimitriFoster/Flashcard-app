@@ -47,4 +47,4 @@ A lightweight flashcard application inspired by the spaced repetition system in 
 
 ```bash
 npm install
-npx expo star
+npx expo start
