@@ -1,3 +1,9 @@
+/**
+ * Web-specific color scheme hook.
+ *
+ * This avoids hydration mismatches by returning light mode until the browser has
+ * mounted and React can safely read the actual system color scheme.
+ */
 import { useEffect, useState } from 'react';
 import { useColorScheme as useRNColorScheme } from 'react-native';
 

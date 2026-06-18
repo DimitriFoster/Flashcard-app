@@ -1,3 +1,10 @@
+/**
+ * Generic flashcard display component.
+ *
+ * This is a reusable card UI for showing the front or back of a flashcard.
+ * The focused review screen currently uses a custom card layout, but this
+ * component is useful for simpler previews or future lists.
+ */
 import { Pressable, StyleSheet, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';

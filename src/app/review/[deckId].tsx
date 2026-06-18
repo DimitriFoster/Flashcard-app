@@ -1,235 +1,220 @@
-import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+/**
+ * Focused deck review route.
+ *
+ * This screen contains the review-session state machine:
+ * - which deck is open
+ * - which card is currently visible
+ * - whether the card is flipped
+ * - how swipe gestures advance between cards
+ * - how difficulty buttons update spaced-repetition state
+ *
+ * The visual layout is delegated to DeckReviewSession so this route file can
+ * focus on data, state, and navigation behavior.
+ */
+import { useFocusEffect } from '@react-navigation/native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, PanResponder } from 'react-native';
 
-import { getDecks, getFlashcardsByDeck } from '@/storage/flashcards';
-import type { Deck, Flashcard } from '@/types/flashcard';
-
-const COLORS = {
-  background: '#F7F8FB',
-  panel: '#FFFFFF',
-  panelAlt: '#EEF2F7',
-  ink: '#172033',
-  muted: '#667085',
-  line: '#D8DEE8',
-  review: '#375DFB',
-  reviewSoft: '#E5EAFF',
-};
+import { DeckReviewSession } from '@/components/review/deck-review-session';
+import { getDecks, getFlashcardsByDeck, reviewFlashcard } from '@/storage/flashcards';
+import type { Deck, Flashcard, ReviewGrade } from '@/types/flashcard';
 
 function findDeck(deckId: string, decks: Deck[]) {
   return decks.find((deck) => deck.id === deckId);
 }
 
-function formatDue(card: Flashcard) {
-  if (!card.dueAt) {
-    return 'new';
-  }
-
-  const dueTime = new Date(card.dueAt).getTime();
-  const diffDays = Math.ceil((dueTime - Date.now()) / 86_400_000);
-
-  if (diffDays <= 0) {
-    return 'due';
-  }
-
-  return diffDays === 1 ? 'tomorrow' : `in ${diffDays} days`;
-}
-
-export default function DeckCardsScreen() {
+export default function DeckReviewScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ deckId?: string }>();
+
+  /**
+   * Expo Router gives dynamic route params as string | string[] | undefined.
+   * The array case can happen when a query param appears more than once.
+   * Normalizing it up front keeps the rest of the screen simpler.
+   */
+  const params = useLocalSearchParams<{ deckId?: string | string[] }>();
   const deckId = Array.isArray(params.deckId) ? params.deckId[0] : params.deckId;
+
   const [decks, setDecks] = useState<Deck[]>([]);
   const [cards, setCards] = useState<Flashcard[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [flipped, setFlipped] = useState(false);
 
-  const selectedDeck = useMemo(
-    () => (deckId ? findDeck(deckId, decks) : undefined),
+  /**
+   * Animated.Value stores the horizontal card position during swipe gestures.
+   * It lives in a ref so the same animated value survives re-renders.
+   */
+  const translateX = useRef(new Animated.Value(0)).current;
+
+  /**
+   * PanResponder callbacks are created once and can otherwise close over stale
+   * values. This ref keeps the latest card count available inside gesture logic.
+   */
+  const cardsLengthRef = useRef(0);
+
+  const deckName = useMemo(
+    () => (deckId ? findDeck(deckId, decks)?.name : undefined),
     [deckId, decks]
   );
+  const currentCard = cards[currentIndex];
 
+  /**
+   * Refresh local state whenever this screen becomes active.
+   * This allows Home/Review changes to show up without restarting the app.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      const nextDecks = getDecks();
+      const nextCards = deckId ? getFlashcardsByDeck(deckId) : [];
+
+      setDecks(nextDecks);
+      setCards(nextCards);
+      setCurrentIndex(0);
+      setFlipped(false);
+      translateX.setValue(0);
+    }, [deckId, translateX])
+  );
+
+  /**
+   * Keep currentIndex valid whenever the number of cards changes.
+   * This prevents a blank screen if the current card array shrinks after review.
+   */
   useEffect(() => {
-    setDecks(getDecks());
-    setCards(deckId ? getFlashcardsByDeck(deckId) : []);
-  }, [deckId]);
+    cardsLengthRef.current = cards.length;
+
+    setCurrentIndex((index) => {
+      if (cards.length === 0) {
+        return 0;
+      }
+
+      return Math.min(index, cards.length - 1);
+    });
+  }, [cards.length]);
+
+  /** Move forward without grading the card. Used by swipe gestures. */
+  const goToNextCard = useCallback(() => {
+    const cardCount = cardsLengthRef.current;
+
+    if (cardCount === 0) {
+      return;
+    }
+
+    setFlipped(false);
+    setCurrentIndex((index) => (index >= cardCount - 1 ? 0 : index + 1));
+  }, []);
+
+  /** Move backward without grading the card. Used by swipe gestures. */
+  const goToPreviousCard = useCallback(() => {
+    const cardCount = cardsLengthRef.current;
+
+    if (cardCount === 0) {
+      return;
+    }
+
+    setFlipped(false);
+    setCurrentIndex((index) => (index <= 0 ? cardCount - 1 : index - 1));
+  }, []);
+
+  /**
+   * Finishes a swipe by sending the card offscreen, then resets translateX to 0
+   * before showing the next/previous card. This creates a physical card-deck feel.
+   */
+  const animateCardOffscreen = useCallback(
+    (direction: 'left' | 'right') => {
+      Animated.timing(translateX, {
+        toValue: direction === 'left' ? -500 : 500,
+        duration: 180,
+        useNativeDriver: true,
+      }).start(() => {
+        translateX.setValue(0);
+
+        if (direction === 'left') {
+          goToNextCard();
+        } else {
+          goToPreviousCard();
+        }
+      });
+    },
+    [goToNextCard, goToPreviousCard, translateX]
+  );
+
+  /**
+   * Difficulty buttons are the only actions that update review scheduling.
+   * Swiping intentionally does not mutate card data. It only browses the deck.
+   */
+  function handleGrade(grade: ReviewGrade) {
+    if (!deckId || !currentCard) {
+      return;
+    }
+
+    reviewFlashcard(currentCard.id, grade);
+
+    /**
+     * Reload from storage so the UI reflects the updated review state.
+     * This also keeps this screen consistent with the Review preview page.
+     */
+    const nextCards = getFlashcardsByDeck(deckId);
+    setCards(nextCards);
+
+    /**
+     * Advance after grading, but clamp against the freshly loaded array length.
+     * This avoids pointing at an index that no longer exists.
+     */
+    setFlipped(false);
+    setCurrentIndex((index) => {
+      if (nextCards.length === 0) {
+        return 0;
+      }
+
+      return index >= nextCards.length - 1 ? 0 : index + 1;
+    });
+  }
+
+  /**
+   * PanResponder turns horizontal drag gestures into card navigation.
+   *
+   * Thresholds:
+   * - 12px: start handling the gesture
+   * - 90px: commit the swipe
+   */
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > 12,
+      onPanResponderMove: (_, gestureState) => {
+        translateX.setValue(gestureState.dx);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dx < -90) {
+          animateCardOffscreen('left');
+          return;
+        }
+
+        if (gestureState.dx > 90) {
+          animateCardOffscreen('right');
+          return;
+        }
+
+        /** If the swipe is too small, spring the card back into place. */
+        Animated.spring(translateX, {
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      },
+    })
+  ).current;
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={[
-        styles.content,
-        {
-          paddingTop: insets.top + 22,
-          paddingBottom: insets.bottom + 110,
-        },
-      ]}>
-      <View style={styles.header}>
-        <Text style={styles.eyebrow}>Review</Text>
-        <Text style={styles.title}>{selectedDeck?.name ?? 'Deck not found'}</Text>
-        <Text style={styles.subtitle}>{cards.length} flashcards in this deck.</Text>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push('/review' as Href)}
-          style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
-          <Text style={styles.backButtonText}>Back to Review</Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.listSection}>
-        {cards.length > 0 ? (
-          cards.map((card, index) => (
-            <View key={card.id} style={styles.cardRow}>
-              <View style={styles.cardNumberPill}>
-                <Text style={styles.cardNumber}>{index + 1}</Text>
-              </View>
-              <View style={styles.cardBody}>
-                <View style={styles.cardMetaRow}>
-                  <Text style={styles.cardSide}>Prompt</Text>
-                  <Text style={styles.cardMeta}>{formatDue(card)}</Text>
-                </View>
-                <Text style={styles.cardFront}>{card.front}</Text>
-                <Text style={styles.cardAnswer}>{card.back}</Text>
-              </View>
-            </View>
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>No cards in this deck</Text>
-            <Text style={styles.emptyText}>Add cards on the home page, then open this deck again.</Text>
-          </View>
-        )}
-      </View>
-    </ScrollView>
+    <DeckReviewSession
+      deckName={deckName}
+      currentIndex={currentIndex}
+      cardsLength={cards.length}
+      currentCard={currentCard}
+      flipped={flipped}
+      translateX={translateX}
+      panHandlers={panResponder.panHandlers}
+      onBack={() => router.push('/review')}
+      onToggleFlip={() => setFlipped((value) => !value)}
+      onGrade={handleGrade}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  content: {
-    paddingHorizontal: 18,
-    gap: 16,
-  },
-  header: {
-    gap: 8,
-    maxWidth: 820,
-  },
-  eyebrow: {
-    color: COLORS.review,
-    fontSize: 13,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  title: {
-    color: COLORS.ink,
-    fontSize: 32,
-    lineHeight: 38,
-    fontWeight: '800',
-  },
-  subtitle: {
-    color: COLORS.muted,
-    fontSize: 16,
-    lineHeight: 23,
-  },
-  backButton: {
-    alignSelf: 'flex-start',
-    minHeight: 44,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.reviewSoft,
-    borderColor: COLORS.review,
-    borderWidth: 1,
-  },
-  backButtonText: {
-    color: COLORS.review,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  listSection: {
-    gap: 12,
-  },
-  cardRow: {
-    flexDirection: 'row',
-    gap: 10,
-    borderRadius: 8,
-    backgroundColor: COLORS.panel,
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    padding: 12,
-  },
-  cardNumberPill: {
-    width: 34,
-    height: 34,
-    borderRadius: 999,
-    backgroundColor: COLORS.reviewSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  cardNumber: {
-    color: COLORS.review,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  cardBody: {
-    flex: 1,
-    gap: 8,
-  },
-  cardMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  cardSide: {
-    color: COLORS.muted,
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  cardMeta: {
-    color: COLORS.review,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  cardFront: {
-    color: COLORS.ink,
-    fontSize: 20,
-    lineHeight: 27,
-    fontWeight: '800',
-  },
-  cardAnswer: {
-    color: COLORS.muted,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  emptyState: {
-    minHeight: 220,
-    borderRadius: 8,
-    backgroundColor: COLORS.panel,
-    borderWidth: 1,
-    borderColor: COLORS.line,
-    padding: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  emptyTitle: {
-    color: COLORS.ink,
-    fontSize: 22,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  emptyText: {
-    color: COLORS.muted,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  pressed: {
-    opacity: 0.78,
-  },
-});

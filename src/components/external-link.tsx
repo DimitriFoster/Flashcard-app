@@ -1,3 +1,9 @@
+/**
+ * Cross-platform external link helper.
+ *
+ * On native it opens links in the system browser instead of trying to push them
+ * through Expo Router as internal routes.
+ */
 import { Href, Link } from 'expo-router';
 import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 import { type ComponentProps } from 'react';

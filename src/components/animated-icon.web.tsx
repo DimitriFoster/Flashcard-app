@@ -1,3 +1,6 @@
+/**
+ * Web version of the animated splash/icon overlay.
+ */
 import { Image } from 'expo-image';
 import { StyleSheet, View } from 'react-native';
 import Animated, { Keyframe, Easing } from 'react-native-reanimated';

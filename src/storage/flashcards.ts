@@ -1,12 +1,32 @@
-import { storage } from './mmkv';
+/**
+ * Flashcard and deck storage helpers.
+ *
+ * This file is the app's local data access layer. Screens should call these
+ * functions instead of reading/writing MMKV directly.
+ *
+ * For an entry-level review project, this is a good separation of concerns:
+ * - UI components handle display and events.
+ * - Storage helpers handle persistence.
+ * - review-scheduling.ts handles the spaced-repetition math.
+ */
 import { Platform } from 'react-native';
 
+import { calculateNextReviewState } from '@/lib/review-scheduling';
 import type { Deck, Flashcard, NewDeck, NewFlashcard, ReviewGrade } from '@/types/flashcard';
+
+import { storage } from './mmkv';
 
 const FLASHCARDS_KEY = 'flashcards';
 const DECKS_KEY = 'decks';
+
+/** Stable fallback deck used when the app starts with no saved decks. */
 export const DEFAULT_DECK_ID = 'default-deck';
 
+/**
+ * Safely parse an array from storage.
+ * If storage has invalid JSON or the wrong shape, return an empty array instead
+ * of crashing the app.
+ */
 function parseJsonArray<T>(value: string | undefined): T[] {
   if (!value) {
     return [];
@@ -20,10 +40,18 @@ function parseJsonArray<T>(value: string | undefined): T[] {
   }
 }
 
+/**
+ * Protects against storage reads during web/static rendering.
+ * On native, MMKV is available. On web, window must exist first.
+ */
 function canUseStorage() {
   return Platform.OS !== 'web' || typeof window !== 'undefined';
 }
 
+/**
+ * Simple local ID generator.
+ * Good enough for offline local data; replace with UUIDs if sync is added later.
+ */
 function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -47,6 +75,10 @@ function saveDecks(decks: Deck[]) {
   storage.set(DECKS_KEY, JSON.stringify(decks));
 }
 
+/**
+ * Normalize cards loaded from storage.
+ * This doubles as a lightweight migration layer if older cards are missing fields.
+ */
 function normalizeFlashcard(card: Partial<Flashcard>): Flashcard {
   const now = new Date().toISOString();
 
@@ -67,6 +99,7 @@ function normalizeFlashcard(card: Partial<Flashcard>): Flashcard {
   };
 }
 
+/** Normalize decks loaded from storage or recovered from card deck IDs. */
 function normalizeDeck(deck: Partial<Deck>): Deck {
   const now = new Date().toISOString();
 
@@ -78,56 +111,6 @@ function normalizeDeck(deck: Partial<Deck>): Deck {
   };
 }
 
-function addDays(date: Date, days: number) {
-  const nextDate = new Date(date);
-  nextDate.setDate(nextDate.getDate() + days);
-  return nextDate;
-}
-
-function nextReviewState(flashcard: Flashcard, grade: ReviewGrade) {
-  const now = new Date();
-  const nowIso = now.toISOString();
-  const currentEase = flashcard.easeFactor ?? 2.5;
-  const currentInterval = flashcard.intervalDays ?? 0;
-  const currentRepetitions = flashcard.repetitions ?? 0;
-  const currentLapses = flashcard.lapses ?? 0;
-
-  if (grade === 'again') {
-    return {
-      dueAt: nowIso,
-      intervalDays: 0,
-      easeFactor: Math.max(1.3, currentEase - 0.2),
-      repetitions: 0,
-      lapses: currentLapses + 1,
-      lastReviewedAt: nowIso,
-      lastStruggledAt: nowIso,
-    };
-  }
-
-  const easeDelta = grade === 'hard' ? -0.15 : grade === 'easy' ? 0.15 : 0;
-  const easeFactor = Math.max(1.3, currentEase + easeDelta);
-  const intervalDays =
-    grade === 'hard'
-      ? Math.max(1, Math.round(currentInterval * 1.2) || 1)
-      : grade === 'easy'
-        ? Math.max(4, Math.round((currentInterval || 1) * easeFactor * 1.3))
-        : currentRepetitions === 0
-          ? 1
-          : currentRepetitions === 1
-            ? 3
-            : Math.max(2, Math.round(currentInterval * easeFactor));
-
-  return {
-    dueAt: addDays(now, intervalDays).toISOString(),
-    intervalDays,
-    easeFactor,
-    repetitions: currentRepetitions + 1,
-    lapses: currentLapses,
-    lastReviewedAt: nowIso,
-    lastStruggledAt: grade === 'hard' ? nowIso : flashcard.lastStruggledAt,
-  };
-}
-
 export function getDecks() {
   if (!canUseStorage()) {
     return [];
@@ -136,6 +119,11 @@ export function getDecks() {
   const flashcards = getFlashcards();
   const savedDecks = parseJsonArray<Deck>(storage.getString(DECKS_KEY)).map(normalizeDeck);
   const decks = savedDecks.length > 0 ? savedDecks : [createDefaultDeck()];
+
+  /**
+   * If flashcards reference decks that do not exist anymore, recover placeholder
+   * decks so those cards remain reachable instead of becoming orphaned data.
+   */
   const knownDeckIds = new Set(decks.map((deck) => deck.id));
   const missingDeckIds = new Set(
     flashcards.map((flashcard) => flashcard.deckId).filter((deckId) => !knownDeckIds.has(deckId))
@@ -144,7 +132,10 @@ export function getDecks() {
   const nextDecks = [
     ...decks,
     ...Array.from(missingDeckIds).map((deckId) =>
-      normalizeDeck({ id: deckId, name: deckId === DEFAULT_DECK_ID ? 'Main Deck' : 'Recovered Deck' })
+      normalizeDeck({
+        id: deckId,
+        name: deckId === DEFAULT_DECK_ID ? 'Main Deck' : 'Recovered Deck',
+      })
     ),
   ];
 
@@ -181,6 +172,8 @@ export function getFlashcards() {
 
   const rawCards = parseJsonArray<Partial<Flashcard>>(storage.getString(FLASHCARDS_KEY));
   const flashcards = rawCards.map(normalizeFlashcard);
+
+  /** If normalization filled missing deckId values, write the migrated data back. */
   const needsMigration = rawCards.some((card, index) => card.deckId !== flashcards[index].deckId);
 
   if (needsMigration) {
@@ -259,7 +252,7 @@ export function reviewFlashcard(id: string, grade: ReviewGrade) {
 
     reviewedFlashcard = {
       ...flashcard,
-      ...nextReviewState(flashcard, grade),
+      ...calculateNextReviewState(flashcard, grade),
       updatedAt: now,
     };
 
@@ -289,6 +282,7 @@ export function deleteFlashcard(id: string) {
   return true;
 }
 
+/** Development helper for resetting card data without deleting decks. */
 export function clearFlashcards() {
   if (!canUseStorage()) {
     return;

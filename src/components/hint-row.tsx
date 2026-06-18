@@ -1,3 +1,6 @@
+/**
+ * Small helper row used for short hint/instruction text.
+ */
 import React, { type ReactNode } from 'react';
 import { View, StyleSheet } from 'react-native';
 

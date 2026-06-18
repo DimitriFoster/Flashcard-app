@@ -1,3 +1,9 @@
+/**
+ * ThemedText wraps React Native Text with app typography presets.
+ *
+ * This is useful for shared template components and any future screens that need
+ * light/dark-aware text without repeating style logic.
+ */
 import { Platform, StyleSheet, Text, type TextProps } from 'react-native';
 
 import { Fonts, ThemeColor } from '@/constants/theme';

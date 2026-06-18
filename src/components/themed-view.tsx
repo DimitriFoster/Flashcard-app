@@ -1,3 +1,6 @@
+/**
+ * ThemedView wraps React Native View with light/dark background colors.
+ */
 import { View, type ViewProps } from 'react-native';
 
 import { ThemeColor } from '@/constants/theme';

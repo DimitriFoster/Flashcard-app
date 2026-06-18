@@ -1,3 +1,9 @@
+/**
+ * Generic collapsible section component.
+ *
+ * This is a template-style utility component that demonstrates local open/close
+ * state and a small enter animation.
+ */
 import { SymbolView } from 'expo-symbols';
 import { PropsWithChildren, useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';

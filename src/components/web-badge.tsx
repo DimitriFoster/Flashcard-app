@@ -1,3 +1,6 @@
+/**
+ * Small Expo badge shown on web/template screens.
+ */
 import { version } from 'expo/package.json';
 import { Image } from 'expo-image';
 import React from 'react';
