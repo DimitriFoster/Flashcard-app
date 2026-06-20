@@ -8,10 +8,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-const COLORS = {
-  review: '#375DFB',
-  reviewSoft: '#E5EAFF',
-};
+import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/design';
 
 type HomeReviewSectionProps = {
   onPressReview: () => void;
@@ -37,12 +34,13 @@ export function HomeReviewSection({ onPressReview }: HomeReviewSectionProps) {
 
 const styles = StyleSheet.create({
   section: {
-    borderRadius: 8,
-    padding: 16,
-    gap: 14,
-    backgroundColor: '#FFFFFF',
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+    gap: SPACING.md,
+    backgroundColor: COLORS.panel,
     borderWidth: 1,
-    borderColor: '#D8DEE8',
+    borderColor: COLORS.line,
+    ...SHADOWS.soft,
   },
   reviewSection: {
     borderTopColor: COLORS.review,
@@ -60,7 +58,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   sectionKicker: {
-    color: '#667085',
+    color: COLORS.muted,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -68,7 +66,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.reviewSoft,
     borderColor: COLORS.review,
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: RADIUS.md,
     minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
@@ -79,6 +77,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   pressed: {
-    opacity: 0.78,
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
   },
 });

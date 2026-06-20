@@ -7,25 +7,18 @@
  */
 import { StyleSheet } from 'react-native';
 
-export const COLORS = {
-  background: '#F7F8FB',
-  panel: '#FFFFFF',
-  ink: '#172033',
-  muted: '#667085',
-  line: '#D8DEE8',
-  review: '#375DFB',
-  reviewSoft: '#E5EAFF',
-  create: '#0E8F7E',
-};
+import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/design';
+
+export { COLORS };
 
 export const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    paddingHorizontal: 18,
+    paddingHorizontal: SPACING.lg,
     backgroundColor: COLORS.background,
   },
   header: {
-    gap: 10,
+    gap: SPACING.sm,
   },
   headerLandscape: {
     flexDirection: 'row',
@@ -38,7 +31,7 @@ export const styles = StyleSheet.create({
   backButton: {
     alignSelf: 'flex-start',
     minHeight: 40,
-    borderRadius: 8,
+    borderRadius: RADIUS.md,
     paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',
@@ -54,6 +47,7 @@ export const styles = StyleSheet.create({
     color: COLORS.review,
     fontSize: 13,
     fontWeight: '800',
+    letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
   title: {
@@ -75,31 +69,61 @@ export const styles = StyleSheet.create({
   stageLandscape: {
     justifyContent: 'center',
   },
-  cardShell: {
+  cardStack: {
     alignSelf: 'stretch',
   },
-  cardShellLandscape: {
+  cardStackLandscape: {
     width: '72%',
     alignSelf: 'center',
   },
+  cardStackBack: {
+    position: 'absolute',
+    top: 22,
+    left: 28,
+    right: 28,
+    bottom: -22,
+    borderRadius: RADIUS.xl,
+    backgroundColor: '#E6D9CA',
+    opacity: 0.6,
+    transform: [{ rotate: '-2deg' }],
+  },
+  cardStackMiddle: {
+    position: 'absolute',
+    top: 12,
+    left: 16,
+    right: 16,
+    bottom: -12,
+    borderRadius: RADIUS.xl,
+    backgroundColor: '#F0E5D7',
+    opacity: 0.9,
+    transform: [{ rotate: '1.5deg' }],
+  },
+  cardShell: {
+    alignSelf: 'stretch',
+  },
   card: {
-    minHeight: 360,
-    borderRadius: 18,
-    padding: 24,
+    minHeight: 390,
+    borderRadius: RADIUS.xl,
+    padding: 28,
     backgroundColor: COLORS.panel,
     borderColor: COLORS.line,
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
+    gap: SPACING.lg,
+    ...SHADOWS.card,
+  },
+  cardPressed: {
+    transform: [{ scale: 0.995 }],
   },
   cardLandscape: {
-    minHeight: 250,
+    minHeight: 260,
   },
   cardSide: {
     color: COLORS.review,
     fontSize: 13,
     fontWeight: '800',
+    letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
   cardText: {
@@ -131,37 +155,44 @@ export const styles = StyleSheet.create({
   gradeButton: {
     flex: 1,
     minWidth: '45%',
-    minHeight: 48,
-    borderRadius: 999,
+    minHeight: 54,
+    borderRadius: RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
+    gap: 2,
   },
   gradeText: {
     fontSize: 14,
+    fontWeight: '900',
+  },
+  gradeHint: {
+    fontSize: 11,
     fontWeight: '800',
+    opacity: 0.72,
+    textTransform: 'uppercase',
   },
   againButton: {
-    backgroundColor: '#FFF4E5',
-    borderColor: '#FEDF89',
+    backgroundColor: COLORS.warningSoft,
+    borderColor: '#F2C47D',
   },
   hardButton: {
-    backgroundColor: '#FEE4E2',
-    borderColor: '#FECDCA',
+    backgroundColor: COLORS.dangerSoft,
+    borderColor: '#F0A296',
   },
   goodButton: {
     backgroundColor: COLORS.reviewSoft,
     borderColor: COLORS.review,
   },
   easyButton: {
-    backgroundColor: '#DCF8F2',
+    backgroundColor: COLORS.createSoft,
     borderColor: COLORS.create,
   },
   againText: {
-    color: '#B54708',
+    color: COLORS.warning,
   },
   hardText: {
-    color: '#D92D20',
+    color: COLORS.danger,
   },
   goodText: {
     color: COLORS.review,
@@ -170,13 +201,14 @@ export const styles = StyleSheet.create({
     color: COLORS.create,
   },
   emptyState: {
-    borderRadius: 16,
+    borderRadius: RADIUS.lg,
     backgroundColor: COLORS.panel,
     borderColor: COLORS.line,
     borderWidth: 1,
     padding: 22,
     alignItems: 'center',
     gap: 8,
+    ...SHADOWS.soft,
   },
   emptyTitle: {
     color: COLORS.ink,
@@ -188,6 +220,7 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
   },
   pressed: {
-    opacity: 0.72,
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
   },
 });

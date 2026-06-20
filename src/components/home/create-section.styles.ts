@@ -6,24 +6,19 @@
  */
 import { StyleSheet } from 'react-native';
 
-export const COLORS = {
-  panel: '#FFFFFF',
-  panelAlt: '#EEF2F7',
-  ink: '#172033',
-  muted: '#667085',
-  line: '#D8DEE8',
-  create: '#0E8F7E',
-  createSoft: '#DCF8F2',
-};
+import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/design';
+
+export { COLORS };
 
 export const styles = StyleSheet.create({
   section: {
-    borderRadius: 8,
-    padding: 16,
-    gap: 14,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+    gap: SPACING.md,
     backgroundColor: COLORS.panel,
     borderWidth: 1,
     borderColor: COLORS.line,
+    ...SHADOWS.soft,
   },
   createSection: {
     borderTopColor: COLORS.create,
@@ -36,6 +31,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 6,
+    ...SHADOWS.card,
   },
   sectionHeader: {
     gap: 4,
@@ -46,7 +42,7 @@ export const styles = StyleSheet.create({
     fontWeight: '800',
   },
   createCollapsedLabel: {
-    color: '#FFFFFF',
+    color: COLORS.white,
   },
   sectionKicker: {
     color: COLORS.muted,
@@ -54,36 +50,58 @@ export const styles = StyleSheet.create({
     fontWeight: '600',
   },
   createCollapsedText: {
-    color: '#FFFFFF',
+    color: COLORS.white,
     fontSize: 18,
     fontWeight: '800',
     textAlign: 'center',
   },
   dropdownToggleRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: SPACING.sm,
   },
   createBody: {
-    gap: 14,
-    paddingTop: 14,
+    gap: SPACING.md,
+    paddingTop: SPACING.md,
+  },
+  destinationRow: {
+    minHeight: 42,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: COLORS.createSoft,
+    borderColor: COLORS.create,
+    borderWidth: 1,
+    gap: 3,
+  },
+  destinationLabel: {
+    color: COLORS.create,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+  },
+  destinationValue: {
+    color: COLORS.ink,
+    fontSize: 15,
+    fontWeight: '800',
   },
   compactToggle: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 42,
-    borderRadius: 8,
+    minHeight: 44,
+    borderRadius: RADIUS.md,
     paddingHorizontal: 12,
     backgroundColor: COLORS.panelAlt,
     borderWidth: 1,
     borderColor: COLORS.line,
   },
   compactToggleNarrow: {
-    flex: 0.88,
+    flex: 0.9,
   },
   compactToggleWide: {
-    flex: 1.12,
+    flex: 1.1,
   },
   deckPickerToggleText: {
     color: COLORS.ink,
@@ -100,12 +118,18 @@ export const styles = StyleSheet.create({
     backgroundColor: COLORS.panelAlt,
     borderColor: COLORS.line,
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: RADIUS.md,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
     lineHeight: 22,
     textAlignVertical: 'top',
+  },
+  frontInput: {
+    minHeight: 92,
+  },
+  backInput: {
+    minHeight: 112,
   },
   deckNameInput: {
     flex: 1,
@@ -113,7 +137,7 @@ export const styles = StyleSheet.create({
   },
   deckButton: {
     minHeight: 48,
-    borderRadius: 8,
+    borderRadius: RADIUS.md,
     paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
@@ -127,22 +151,22 @@ export const styles = StyleSheet.create({
     fontWeight: '800',
   },
   deckPicker: {
-    gap: 10,
+    gap: SPACING.sm,
     paddingVertical: 2,
   },
   deckPickerPanel: {
-    gap: 12,
+    gap: SPACING.md,
     backgroundColor: COLORS.panel,
-    borderRadius: 8,
+    borderRadius: RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.line,
     padding: 12,
     overflow: 'hidden',
   },
   newDeckPanel: {
-    gap: 10,
+    gap: SPACING.sm,
     backgroundColor: COLORS.panel,
-    borderRadius: 8,
+    borderRadius: RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.line,
     padding: 12,
@@ -150,7 +174,7 @@ export const styles = StyleSheet.create({
   },
   deckChip: {
     minWidth: 132,
-    borderRadius: 8,
+    borderRadius: RADIUS.md,
     backgroundColor: COLORS.panelAlt,
     borderWidth: 1,
     borderColor: COLORS.line,
@@ -177,16 +201,16 @@ export const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: COLORS.create,
-    borderRadius: 8,
+    borderRadius: RADIUS.md,
     minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primaryButtonDisabled: {
-    backgroundColor: '#D5DBE5',
+    backgroundColor: COLORS.disabled,
   },
   primaryButtonText: {
-    color: '#FFFFFF',
+    color: COLORS.white,
     fontSize: 16,
     fontWeight: '800',
   },
@@ -194,7 +218,21 @@ export const styles = StyleSheet.create({
     color: COLORS.muted,
   },
   pressed: {
-    opacity: 0.78,
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  statusMessage: {
+    alignSelf: 'flex-start',
+    color: COLORS.create,
+    backgroundColor: COLORS.createSoft,
+    borderColor: COLORS.create,
+    borderWidth: 1,
+    borderRadius: RADIUS.pill,
+    overflow: 'hidden',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    fontSize: 13,
+    fontWeight: '800',
   },
   deckSummary: {
     flexDirection: 'row',

@@ -16,6 +16,9 @@ import {
   useWindowDimensions,
   View,
   type PanResponderInstance,
+  type StyleProp,
+  type TextStyle,
+  type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -34,6 +37,43 @@ type DeckReviewSessionProps = {
   onToggleFlip: () => void;
   onGrade: (grade: ReviewGrade) => void;
 };
+
+const gradeButtons: Array<{
+  label: string;
+  hint: string;
+  grade: ReviewGrade;
+  buttonStyle: StyleProp<ViewStyle>;
+  textStyle: StyleProp<TextStyle>;
+}> = [
+  {
+    label: 'Again',
+    hint: 'soon',
+    grade: 'again',
+    buttonStyle: styles.againButton,
+    textStyle: styles.againText,
+  },
+  {
+    label: 'Hard',
+    hint: 'short',
+    grade: 'hard',
+    buttonStyle: styles.hardButton,
+    textStyle: styles.hardText,
+  },
+  {
+    label: 'Good',
+    hint: 'normal',
+    grade: 'good',
+    buttonStyle: styles.goodButton,
+    textStyle: styles.goodText,
+  },
+  {
+    label: 'Easy',
+    hint: 'later',
+    grade: 'easy',
+    buttonStyle: styles.easyButton,
+    textStyle: styles.easyText,
+  },
+];
 
 export function DeckReviewSession({
   deckName,
@@ -84,38 +124,45 @@ export function DeckReviewSession({
 
       <View style={[styles.stage, isLandscape && styles.stageLandscape]}>
         {currentCard ? (
-          <Animated.View
-            {...panHandlers}
-            style={[
-              styles.cardShell,
-              isLandscape && styles.cardShellLandscape,
-              {
-                /**
-                 * translateX follows the user's finger while dragging.
-                 * rotate adds a small physical card-like motion.
-                 */
-                transform: [
-                  { translateX },
-                  {
-                    rotate: translateX.interpolate({
-                      inputRange: [-300, 0, 300],
-                      outputRange: ['-8deg', '0deg', '8deg'],
-                    }),
-                  },
-                ],
-              },
-            ]}>
-            <Pressable
-              accessibilityRole="button"
-              onPress={onToggleFlip}
-              style={[styles.card, isLandscape && styles.cardLandscape]}>
-              <Text style={styles.cardSide}>{flipped ? 'Answer' : 'Prompt'}</Text>
-              <Text style={[styles.cardText, isLandscape && styles.cardTextLandscape]}>
-                {flipped ? currentCard.back : currentCard.front}
-              </Text>
-              <Text style={styles.tapHint}>Tap to flip. Swipe left or right.</Text>
-            </Pressable>
-          </Animated.View>
+          <View style={[styles.cardStack, isLandscape && styles.cardStackLandscape]}>
+            <View pointerEvents="none" style={styles.cardStackBack} />
+            <View pointerEvents="none" style={styles.cardStackMiddle} />
+            <Animated.View
+              {...panHandlers}
+              style={[
+                styles.cardShell,
+                {
+                  /**
+                   * translateX follows the user's finger while dragging.
+                   * rotate adds a small physical card-like motion.
+                   */
+                  transform: [
+                    { translateX },
+                    {
+                      rotate: translateX.interpolate({
+                        inputRange: [-300, 0, 300],
+                        outputRange: ['-8deg', '0deg', '8deg'],
+                      }),
+                    },
+                  ],
+                },
+              ]}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={onToggleFlip}
+                style={({ pressed }) => [
+                  styles.card,
+                  isLandscape && styles.cardLandscape,
+                  pressed && styles.cardPressed,
+                ]}>
+                <Text style={styles.cardSide}>{flipped ? 'Answer' : 'Prompt'}</Text>
+                <Text style={[styles.cardText, isLandscape && styles.cardTextLandscape]}>
+                  {flipped ? currentCard.back : currentCard.front}
+                </Text>
+                <Text style={styles.tapHint}>Tap to flip · Swipe to browse</Text>
+              </Pressable>
+            </Animated.View>
+          </View>
         ) : (
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>No cards in this deck</Text>
@@ -126,53 +173,20 @@ export function DeckReviewSession({
 
       {currentCard ? (
         <View style={[styles.gradeRow, isLandscape && styles.gradeRowLandscape]}>
-          {/*
-            The labels intentionally use plain-language difficulty choices.
-            They map to ReviewGrade values in the route file.
-          */}
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => onGrade('again')}
-            style={({ pressed }) => [
-              styles.gradeButton,
-              styles.againButton,
-              pressed && styles.pressed,
-            ]}>
-            <Text style={[styles.gradeText, styles.againText]}>Again</Text>
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => onGrade('hard')}
-            style={({ pressed }) => [
-              styles.gradeButton,
-              styles.hardButton,
-              pressed && styles.pressed,
-            ]}>
-            <Text style={[styles.gradeText, styles.hardText]}>Hard</Text>
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => onGrade('good')}
-            style={({ pressed }) => [
-              styles.gradeButton,
-              styles.goodButton,
-              pressed && styles.pressed,
-            ]}>
-            <Text style={[styles.gradeText, styles.goodText]}>Good</Text>
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => onGrade('easy')}
-            style={({ pressed }) => [
-              styles.gradeButton,
-              styles.easyButton,
-              pressed && styles.pressed,
-            ]}>
-            <Text style={[styles.gradeText, styles.easyText]}>Easy</Text>
-          </Pressable>
+          {gradeButtons.map((button) => (
+            <Pressable
+              key={button.grade}
+              accessibilityRole="button"
+              onPress={() => onGrade(button.grade)}
+              style={({ pressed }) => [
+                styles.gradeButton,
+                button.buttonStyle,
+                pressed && styles.pressed,
+              ]}>
+              <Text style={[styles.gradeText, button.textStyle]}>{button.label}</Text>
+              <Text style={[styles.gradeHint, button.textStyle]}>{button.hint}</Text>
+            </Pressable>
+          ))}
         </View>
       ) : null}
     </View>

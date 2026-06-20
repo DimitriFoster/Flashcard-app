@@ -10,11 +10,12 @@
  * This keeps the form responsive while still letting the parent refresh the rest
  * of the screen after a deck or card is created.
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
-import { COLORS, styles } from './create-section.styles';
+import { MOTION } from '@/constants/design';
 import type { Deck, Flashcard, NewFlashcard } from '@/types/flashcard';
+import { COLORS, styles } from './create-section.styles';
 
 /** Count cards for one deck. Used by the horizontal deck picker chips. */
 function getDeckCardCount(deckId: string, cards: Flashcard[]) {
@@ -57,6 +58,7 @@ export function HomeCreateSection({
   const [deckName, setDeckName] = useState('');
   const [front, setFront] = useState('');
   const [back, setBack] = useState('');
+  const [statusMessage, setStatusMessage] = useState('');
 
   /**
    * Animated.Value objects persist across renders with useRef.
@@ -64,10 +66,29 @@ export function HomeCreateSection({
    */
   const deckPickerProgress = useRef(new Animated.Value(0)).current;
   const newDeckProgress = useRef(new Animated.Value(0)).current;
+  const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const addCardButtonLabel = selectedDeck
-    ? `Add card to ${selectedDeck.name}`
-    : 'Add card to existing Deck';
+  const addCardButtonLabel = selectedDeck ? `Add to ${selectedDeck.name}` : 'Choose a deck first';
+
+  useEffect(() => {
+    return () => {
+      if (statusTimeoutRef.current) {
+        clearTimeout(statusTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  function showStatus(message: string) {
+    setStatusMessage(message);
+
+    if (statusTimeoutRef.current) {
+      clearTimeout(statusTimeoutRef.current);
+    }
+
+    statusTimeoutRef.current = setTimeout(() => {
+      setStatusMessage('');
+    }, 1500);
+  }
 
   function toggleDeckPicker() {
     const nextValue = showDeckPicker ? 0 : 1;
@@ -80,8 +101,8 @@ export function HomeCreateSection({
 
     Animated.timing(deckPickerProgress, {
       toValue: nextValue,
-      duration: 520,
-      easing: Easing.out(Easing.cubic),
+      duration: MOTION.fast,
+      easing: Easing.out(Easing.quad),
       /**
        * Height animation cannot use the native driver.
        * Native driver only supports transform and opacity.
@@ -105,8 +126,8 @@ export function HomeCreateSection({
 
     Animated.timing(newDeckProgress, {
       toValue: nextValue,
-      duration: 520,
-      easing: Easing.out(Easing.cubic),
+      duration: MOTION.fast,
+      easing: Easing.out(Easing.quad),
       useNativeDriver: false,
     }).start(({ finished }) => {
       if (finished && nextValue === 0) {
@@ -133,13 +154,14 @@ export function HomeCreateSection({
       /** New decks become the active destination for card creation. */
       onSelectDeckId(deck.id);
       setDeckName('');
+      showStatus(`Deck created: ${deck.name} ✓`);
 
       /** Collapse the new deck form after successful creation. */
       setShowNewDeckForm(false);
       Animated.timing(newDeckProgress, {
         toValue: 0,
-        duration: 520,
-        easing: Easing.out(Easing.cubic),
+        duration: MOTION.fast,
+        easing: Easing.out(Easing.quad),
         useNativeDriver: false,
       }).start(({ finished }) => {
         if (finished) {
@@ -149,6 +171,13 @@ export function HomeCreateSection({
 
       /** Show the deck picker so the user can see the deck they just created. */
       setShowDeckPicker(true);
+      setIsDeckPickerRendered(true);
+      Animated.timing(deckPickerProgress, {
+        toValue: 1,
+        duration: MOTION.fast,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: false,
+      }).start();
     }
   }
 
@@ -171,6 +200,7 @@ export function HomeCreateSection({
       /** Clear the card form so the user can quickly enter the next card. */
       setFront('');
       setBack('');
+      showStatus(`Added to ${selectedDeck.name} ✓`);
     }
   }
 
@@ -187,6 +217,11 @@ export function HomeCreateSection({
           </Pressable>
 
           <View style={styles.createBody}>
+            <View style={styles.destinationRow}>
+              <Text style={styles.destinationLabel}>Deck</Text>
+              <Text style={styles.destinationValue}>{selectedDeck?.name ?? 'No deck selected'}</Text>
+            </View>
+
             <TextInput
               multiline
               placeholder="Front: prompt, term, or question"
@@ -214,7 +249,7 @@ export function HomeCreateSection({
                   styles.compactToggleNarrow,
                   pressed && styles.pressed,
                 ]}>
-                <Text style={styles.deckPickerToggleText}>New Deck</Text>
+                <Text style={styles.deckPickerToggleText}>New deck</Text>
                 <Animated.Text
                   style={[
                     styles.deckPickerToggleChevron,
@@ -241,7 +276,7 @@ export function HomeCreateSection({
                   styles.compactToggleWide,
                   pressed && styles.pressed,
                 ]}>
-                <Text style={styles.deckPickerToggleText}>Add cards to existing Deck</Text>
+                <Text style={styles.deckPickerToggleText}>Pick deck</Text>
                 <Animated.Text
                   style={[
                     styles.deckPickerToggleChevron,
@@ -268,7 +303,7 @@ export function HomeCreateSection({
                   {
                     height: newDeckProgress.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [0, 116],
+                      outputRange: [0, 136],
                     }),
                     opacity: newDeckProgress.interpolate({
                       inputRange: [0, 1],
@@ -337,7 +372,11 @@ export function HomeCreateSection({
                         key={deck.id}
                         accessibilityRole="button"
                         onPress={() => onSelectDeckId(deck.id)}
-                        style={[styles.deckChip, active && styles.deckChipActive]}>
+                        style={({ pressed }) => [
+                          styles.deckChip,
+                          active && styles.deckChipActive,
+                          pressed && styles.pressed,
+                        ]}>
                         <Text style={[styles.deckChipText, active && styles.deckChipTextActive]}>
                           {deck.name}
                         </Text>
@@ -369,6 +408,8 @@ export function HomeCreateSection({
                 </Pressable>
               </Animated.View>
             ) : null}
+
+            {statusMessage ? <Text style={styles.statusMessage}>{statusMessage}</Text> : null}
 
             <View style={styles.deckSummary}>
               <Text style={styles.metric}>{decks.length}</Text>

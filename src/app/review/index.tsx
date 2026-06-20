@@ -16,19 +16,9 @@ import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PreviewPanel } from '@/components/review/preview-panel';
+import { COLORS, RADIUS, SPACING } from '@/constants/design';
 import { getDecks, getFlashcards } from '@/storage/flashcards';
 import type { Deck, Flashcard } from '@/types/flashcard';
-
-const COLORS = {
-  background: '#F7F8FB',
-  ink: '#172033',
-  muted: '#667085',
-  line: '#D8DEE8',
-  review: '#375DFB',
-  reviewSoft: '#E5EAFF',
-  warning: '#B54708',
-  warningSoft: '#FFF4E5',
-};
 
 /** Find the deck object for a card's deckId. */
 function findDeck(deckId: string, decks: Deck[]) {
@@ -161,8 +151,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   content: {
-    paddingHorizontal: 18,
-    gap: 16,
+    paddingHorizontal: SPACING.lg,
+    gap: SPACING.md,
   },
   header: {
     gap: 8,
@@ -171,7 +161,8 @@ const styles = StyleSheet.create({
   eyebrow: {
     color: COLORS.review,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
+    letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
   title: {
@@ -188,7 +179,7 @@ const styles = StyleSheet.create({
   createButton: {
     alignSelf: 'flex-start',
     minHeight: 44,
-    borderRadius: 8,
+    borderRadius: RADIUS.md,
     paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
@@ -202,7 +193,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   previewGrid: {
-    gap: 14,
+    gap: SPACING.md,
   },
   previewGridWide: {
     flexDirection: 'row',
@@ -210,9 +201,9 @@ const styles = StyleSheet.create({
   },
   retentionNote: {
     backgroundColor: COLORS.warningSoft,
-    borderColor: '#FEDF89',
+    borderColor: '#F2C47D',
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: RADIUS.md,
     padding: 12,
     gap: 5,
   },
@@ -227,6 +218,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   pressed: {
-    opacity: 0.78,
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
   },
 });

@@ -7,19 +7,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/design';
 import type { Deck, Flashcard } from '@/types/flashcard';
-
-const COLORS = {
-  panel: '#FFFFFF',
-  panelAlt: '#EEF2F7',
-  ink: '#172033',
-  muted: '#667085',
-  line: '#D8DEE8',
-  review: '#375DFB',
-  reviewSoft: '#E5EAFF',
-  warning: '#B54708',
-  warningSoft: '#FFF4E5',
-};
 
 /**
  * Convert a card's dueAt date into a friendly label.
@@ -94,7 +83,7 @@ export function PreviewPanel({
         style={({ pressed }) => [
           styles.openDeckButton,
           !deckId && styles.disabledButton,
-          pressed && styles.pressed,
+          pressed && deckId && styles.pressed,
         ]}>
         <Text style={[styles.openDeckButtonText, !deckId && styles.disabledButtonText]}>
           Open this deck
@@ -110,12 +99,13 @@ const styles = StyleSheet.create({
   previewPanel: {
     flex: 1,
     minHeight: 420,
-    borderRadius: 8,
+    borderRadius: RADIUS.lg,
     backgroundColor: COLORS.panel,
     borderWidth: 1,
     borderColor: COLORS.line,
-    padding: 14,
-    gap: 12,
+    padding: SPACING.md,
+    gap: SPACING.md,
+    ...SHADOWS.soft,
   },
   previewHeader: {
     flexDirection: 'row',
@@ -140,7 +130,7 @@ const styles = StyleSheet.create({
   deckBadge: {
     color: COLORS.review,
     backgroundColor: COLORS.reviewSoft,
-    borderRadius: 999,
+    borderRadius: RADIUS.pill,
     overflow: 'hidden',
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -150,11 +140,11 @@ const styles = StyleSheet.create({
   previewCard: {
     flex: 1,
     minHeight: 180,
-    borderRadius: 8,
+    borderRadius: RADIUS.lg,
     backgroundColor: COLORS.panelAlt,
     borderColor: COLORS.line,
     borderWidth: 1,
-    padding: 14,
+    padding: SPACING.md,
     justifyContent: 'center',
     gap: 8,
   },
@@ -162,6 +152,7 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     fontSize: 12,
     fontWeight: '800',
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
   previewPrompt: {
@@ -187,7 +178,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     padding: 12,
-    borderRadius: 8,
+    borderRadius: RADIUS.lg,
     backgroundColor: COLORS.panelAlt,
     borderColor: COLORS.line,
     borderWidth: 1,
@@ -205,13 +196,13 @@ const styles = StyleSheet.create({
   },
   openDeckButton: {
     minHeight: 44,
-    borderRadius: 8,
+    borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.review,
   },
   openDeckButtonText: {
-    color: '#FFFFFF',
+    color: COLORS.white,
     fontSize: 15,
     fontWeight: '800',
   },
@@ -224,6 +215,7 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
   },
   pressed: {
-    opacity: 0.78,
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
   },
 });

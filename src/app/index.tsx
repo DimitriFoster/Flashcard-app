@@ -18,19 +18,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HomeCreateSection } from '@/components/home/create-section';
 import { HomeReviewSection } from '@/components/home/review-section';
+import { COLORS, SPACING } from '@/constants/design';
 import { addDeck, addFlashcard, getDecks, getFlashcards } from '@/storage/flashcards';
 import type { Deck, Flashcard, NewFlashcard } from '@/types/flashcard';
-
-/**
- * Local color constants keep this screen self-contained.
- * Longer term, these can be moved into a shared design-token file.
- */
-const COLORS = {
-  background: '#F7F8FB',
-  ink: '#172033',
-  muted: '#667085',
-  review: '#375DFB',
-};
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -141,8 +131,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   content: {
-    paddingHorizontal: 18,
-    gap: 18,
+    paddingHorizontal: SPACING.lg,
+    gap: SPACING.lg,
   },
   header: {
     gap: 8,
@@ -151,7 +141,8 @@ const styles = StyleSheet.create({
   eyebrow: {
     color: COLORS.review,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
+    letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
   title: {
