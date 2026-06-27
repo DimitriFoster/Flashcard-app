@@ -11,18 +11,8 @@
  * of the screen after a deck or card is created.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import {
-  Alert,
-  Animated,
-  Easing,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Animated, Easing, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
-import { CrayonFill } from '@/components/ui/crayon-fill';
 import { MOTION } from '@/constants/design';
 import type { Deck, Flashcard, NewFlashcard } from '@/types/flashcard';
 import { COLORS, styles } from './create-section.styles';
@@ -32,23 +22,6 @@ function getDeckCardCount(deckId: string, cards: Flashcard[]) {
   return cards.filter((card) => card.deckId === deckId).length;
 }
 
-function previewText(value: string, maxLength = 72) {
-  const trimmed = value.trim();
-
-  if (trimmed.length <= maxLength) {
-    return trimmed;
-  }
-
-  return `${trimmed.slice(0, maxLength - 1)}…`;
-}
-
-type DeleteDeckResult = {
-  deck: Deck;
-  deletedCards: number;
-  decks: Deck[];
-  flashcards: Flashcard[];
-};
-
 type HomeCreateSectionProps = {
   decks: Deck[];
   cards: Flashcard[];
@@ -56,8 +29,6 @@ type HomeCreateSectionProps = {
   onSelectDeckId: (deckId: string) => void;
   onCreateDeck: (name: string) => Deck | undefined;
   onCreateCard: (input: NewFlashcard) => Flashcard | undefined;
-  onDeleteDeck: (deckId: string) => DeleteDeckResult | undefined;
-  onDeleteCard: (cardId: string) => Flashcard | undefined;
 };
 
 export function HomeCreateSection({
@@ -67,8 +38,6 @@ export function HomeCreateSection({
   onSelectDeckId,
   onCreateDeck,
   onCreateCard,
-  onDeleteDeck,
-  onDeleteCard,
 }: HomeCreateSectionProps) {
   /**
    * The create area starts collapsed so the home screen feels simple and inviting.
@@ -99,9 +68,6 @@ export function HomeCreateSection({
   const newDeckProgress = useRef(new Animated.Value(0)).current;
   const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const selectedDeckCards = selectedDeck
-    ? cards.filter((card) => card.deckId === selectedDeck.id)
-    : [];
   const addCardButtonLabel = selectedDeck ? `Add to ${selectedDeck.name}` : 'Choose a deck first';
 
   useEffect(() => {
@@ -121,7 +87,7 @@ export function HomeCreateSection({
 
     statusTimeoutRef.current = setTimeout(() => {
       setStatusMessage('');
-    }, 1800);
+    }, 1500);
   }
 
   function toggleDeckPicker() {
@@ -238,69 +204,20 @@ export function HomeCreateSection({
     }
   }
 
-  function deleteSelectedDeck() {
-    if (!selectedDeck) {
-      return;
-    }
-
-    const cardCount = selectedDeckCards.length;
-    const cardCopy = cardCount === 1 ? '1 card' : `${cardCount} cards`;
-
-    Alert.alert(
-      'Delete deck?',
-      `Delete "${selectedDeck.name}" and ${cardCopy}? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete deck',
-          style: 'destructive',
-          onPress: () => {
-            const result = onDeleteDeck(selectedDeck.id);
-
-            if (result) {
-              setFront('');
-              setBack('');
-              showStatus(`Deleted ${result.deck.name} and ${result.deletedCards} cards`);
-            }
-          },
-        },
-      ]
-    );
-  }
-
-  function deleteCard(card: Flashcard) {
-    Alert.alert('Delete card?', `Delete "${previewText(card.front, 42)}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete card',
-        style: 'destructive',
-        onPress: () => {
-          const deletedCard = onDeleteCard(card.id);
-
-          if (deletedCard) {
-            showStatus('Card deleted');
-          }
-        },
-      },
-    ]);
-  }
-
   return (
     <>
       {showCreateDetails ? (
         <View style={[styles.section, styles.createSection]}>
-          <CrayonFill tone="create" variant="loose" opacity={0.42} />
           <Pressable
             accessibilityRole="button"
             onPress={toggleCreateSection}
             style={({ pressed }) => [styles.sectionHeader, pressed && styles.pressed]}>
             <Text style={styles.sectionLabel}>create</Text>
-            <Text style={styles.sectionKicker}>Choose a deck, add cards, or manage saved cards.</Text>
+            <Text style={styles.sectionKicker}>Choose a deck or start a new one.</Text>
           </Pressable>
 
           <View style={styles.createBody}>
             <View style={styles.destinationRow}>
-              <CrayonFill tone="create" variant="tight" opacity={0.65} />
               <Text style={styles.destinationLabel}>Deck</Text>
               <Text style={styles.destinationValue}>{selectedDeck?.name ?? 'No deck selected'}</Text>
             </View>
@@ -415,7 +332,6 @@ export function HomeCreateSection({
                   accessibilityRole="button"
                   onPress={createDeck}
                   style={({ pressed }) => [styles.deckButton, pressed && styles.pressed]}>
-                  <CrayonFill tone="create" variant="tight" opacity={0.75} />
                   <Text style={styles.deckButtonText}>Create deck</Text>
                 </Pressable>
               </Animated.View>
@@ -461,7 +377,6 @@ export function HomeCreateSection({
                           active && styles.deckChipActive,
                           pressed && styles.pressed,
                         ]}>
-                        {active ? <CrayonFill tone="create" variant="tight" opacity={0.58} /> : null}
                         <Text style={[styles.deckChipText, active && styles.deckChipTextActive]}>
                           {deck.name}
                         </Text>
@@ -483,7 +398,6 @@ export function HomeCreateSection({
                     !selectedDeck && styles.primaryButtonDisabled,
                     pressed && selectedDeck && styles.pressed,
                   ]}>
-                  {selectedDeck ? <CrayonFill tone="create" variant="tight" opacity={0.8} /> : null}
                   <Text
                     style={[
                       styles.primaryButtonText,
@@ -495,61 +409,7 @@ export function HomeCreateSection({
               </Animated.View>
             ) : null}
 
-            {selectedDeck ? (
-              <View style={styles.managePanel}>
-                <View style={styles.manageHeader}>
-                  <View style={styles.manageTitleGroup}>
-                    <Text style={styles.manageTitle}>Manage selected deck</Text>
-                    <Text style={styles.manageSubtitle}>
-                      {selectedDeckCards.length} {selectedDeckCards.length === 1 ? 'card' : 'cards'} in{' '}
-                      {selectedDeck.name}
-                    </Text>
-                  </View>
-
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={deleteSelectedDeck}
-                    style={({ pressed }) => [styles.deleteDeckButton, pressed && styles.pressed]}>
-                    <Text style={styles.deleteDeckButtonText}>Delete deck</Text>
-                  </Pressable>
-                </View>
-
-                {selectedDeckCards.length > 0 ? (
-                  <ScrollView
-                    nestedScrollEnabled
-                    showsVerticalScrollIndicator={selectedDeckCards.length > 4}
-                    style={styles.cardListWindow}
-                    contentContainerStyle={styles.cardList}>
-                    {selectedDeckCards.map((card) => (
-                      <View key={card.id} style={styles.managedCard}>
-                        <View style={styles.managedCardTextGroup}>
-                          <Text style={styles.managedCardFront}>{previewText(card.front)}</Text>
-                          <Text style={styles.managedCardBack}>{previewText(card.back)}</Text>
-                        </View>
-
-                        <Pressable
-                          accessibilityRole="button"
-                          onPress={() => deleteCard(card)}
-                          style={({ pressed }) => [styles.deleteCardButton, pressed && styles.pressed]}>
-                          <Text style={styles.deleteCardButtonText}>Delete</Text>
-                        </Pressable>
-                      </View>
-                    ))}
-                  </ScrollView>
-                ) : (
-                  <View style={styles.emptyManageState}>
-                    <Text style={styles.emptyManageText}>No saved cards in this deck yet.</Text>
-                  </View>
-                )}
-              </View>
-            ) : null}
-
-            {statusMessage ? (
-              <View style={styles.statusMessage}>
-                <CrayonFill tone="create" variant="tight" opacity={0.55} />
-                <Text style={styles.statusMessageText}>{statusMessage}</Text>
-              </View>
-            ) : null}
+            {statusMessage ? <Text style={styles.statusMessage}>{statusMessage}</Text> : null}
 
             <View style={styles.deckSummary}>
               <Text style={styles.metric}>{decks.length}</Text>
@@ -568,7 +428,6 @@ export function HomeCreateSection({
             styles.createCollapsedSection,
             pressed && styles.pressed,
           ]}>
-          <CrayonFill tone="create" variant="loose" opacity={0.9} />
           <Text style={[styles.sectionLabel, styles.createCollapsedLabel]}>create</Text>
           <Text style={styles.createCollapsedText}>Choose a deck or start a new one.</Text>
         </Pressable>

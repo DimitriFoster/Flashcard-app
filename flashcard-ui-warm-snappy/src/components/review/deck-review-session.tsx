@@ -22,7 +22,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CrayonFill, type CrayonTone, type CrayonVariant } from '@/components/ui/crayon-fill';
 import { styles } from './deck-review-session.styles';
 import type { Flashcard, ReviewGrade } from '@/types/flashcard';
 
@@ -35,26 +34,23 @@ type DeckReviewSessionProps = {
   translateX: Animated.Value;
   panHandlers: PanResponderInstance['panHandlers'];
   onBack: () => void;
+  onToggleFlip: () => void;
   onGrade: (grade: ReviewGrade) => void;
 };
 
-const gradeButtons: {
+const gradeButtons: Array<{
   label: string;
   hint: string;
   grade: ReviewGrade;
   buttonStyle: StyleProp<ViewStyle>;
   textStyle: StyleProp<TextStyle>;
-  crayonTone: CrayonTone;
-  crayonVariant: CrayonVariant;
-}[] = [
+}> = [
   {
     label: 'Again',
     hint: 'soon',
     grade: 'again',
     buttonStyle: styles.againButton,
     textStyle: styles.againText,
-    crayonTone: 'warning',
-    crayonVariant: 'dense',
   },
   {
     label: 'Hard',
@@ -62,8 +58,6 @@ const gradeButtons: {
     grade: 'hard',
     buttonStyle: styles.hardButton,
     textStyle: styles.hardText,
-    crayonTone: 'danger',
-    crayonVariant: 'dense',
   },
   {
     label: 'Good',
@@ -71,8 +65,6 @@ const gradeButtons: {
     grade: 'good',
     buttonStyle: styles.goodButton,
     textStyle: styles.goodText,
-    crayonTone: 'review',
-    crayonVariant: 'tight',
   },
   {
     label: 'Easy',
@@ -80,8 +72,6 @@ const gradeButtons: {
     grade: 'easy',
     buttonStyle: styles.easyButton,
     textStyle: styles.easyText,
-    crayonTone: 'create',
-    crayonVariant: 'tight',
   },
 ];
 
@@ -94,6 +84,7 @@ export function DeckReviewSession({
   translateX,
   panHandlers,
   onBack,
+  onToggleFlip,
   onGrade,
 }: DeckReviewSessionProps) {
   const insets = useSafeAreaInsets();
@@ -119,7 +110,6 @@ export function DeckReviewSession({
           accessibilityRole="button"
           onPress={onBack}
           style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
-          <CrayonFill tone="review" variant="tight" opacity={0.7} />
           <Text style={styles.backButtonText}>Back</Text>
         </Pressable>
 
@@ -135,11 +125,9 @@ export function DeckReviewSession({
       <View style={[styles.stage, isLandscape && styles.stageLandscape]}>
         {currentCard ? (
           <View style={[styles.cardStack, isLandscape && styles.cardStackLandscape]}>
-            <CrayonFill tone="review" variant="loose" opacity={0.16} style={styles.stageCrayon} />
             <View pointerEvents="none" style={styles.cardStackBack} />
             <View pointerEvents="none" style={styles.cardStackMiddle} />
             <Animated.View
-              key={currentCard.id}
               {...panHandlers}
               style={[
                 styles.cardShell,
@@ -159,13 +147,20 @@ export function DeckReviewSession({
                   ],
                 },
               ]}>
-              <View style={[styles.card, isLandscape && styles.cardLandscape]}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={onToggleFlip}
+                style={({ pressed }) => [
+                  styles.card,
+                  isLandscape && styles.cardLandscape,
+                  pressed && styles.cardPressed,
+                ]}>
                 <Text style={styles.cardSide}>{flipped ? 'Answer' : 'Prompt'}</Text>
                 <Text style={[styles.cardText, isLandscape && styles.cardTextLandscape]}>
                   {flipped ? currentCard.back : currentCard.front}
                 </Text>
                 <Text style={styles.tapHint}>Tap to flip · Swipe to browse</Text>
-              </View>
+              </Pressable>
             </Animated.View>
           </View>
         ) : (
@@ -188,7 +183,6 @@ export function DeckReviewSession({
                 button.buttonStyle,
                 pressed && styles.pressed,
               ]}>
-              <CrayonFill tone={button.crayonTone} variant={button.crayonVariant} opacity={0.7} />
               <Text style={[styles.gradeText, button.textStyle]}>{button.label}</Text>
               <Text style={[styles.gradeHint, button.textStyle]}>{button.hint}</Text>
             </Pressable>

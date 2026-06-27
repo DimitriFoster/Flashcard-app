@@ -1,13 +1,13 @@
 /**
  * Review index screen.
  *
- * This screen helps the user choose what to review next. It currently shows two
- * high-value entry points:
- * - the newest card created
- * - the most recently struggled card
+ * This screen now works like a deck carousel:
+ * - each existing deck gets its own horizontal preview block
+ * - each block previews the newest card in that deck
+ * - each block's button opens that exact deck's focused review session
  *
- * This is deliberately simpler than a full dashboard. The goal is to keep the
- * review workflow fast and easy to understand.
+ * The previous "Most recently struggled" block was removed to keep the review
+ * entry point simpler and deck-centered.
  */
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
@@ -16,14 +16,10 @@ import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PreviewPanel } from '@/components/review/preview-panel';
+import { CrayonFill } from '@/components/ui/crayon-fill';
 import { COLORS, RADIUS, SPACING } from '@/constants/design';
 import { getDecks, getFlashcards } from '@/storage/flashcards';
 import type { Deck, Flashcard } from '@/types/flashcard';
-
-/** Find the deck object for a card's deckId. */
-function findDeck(deckId: string, decks: Deck[]) {
-  return decks.find((deck) => deck.id === deckId);
-}
 
 /**
  * Returns the newest card by createdAt.
@@ -33,15 +29,15 @@ function getMostRecentCard(cards: Flashcard[]) {
   return [...cards].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
 }
 
-/**
- * Returns the latest card that the user marked as difficult.
- * Cards only enter this list after a review action sets lastStruggledAt.
- */
-function getMostRecentlyStruggledCard(cards: Flashcard[]) {
-  return [...cards]
-    .filter((card) => card.lastStruggledAt)
-    .sort((a, b) => (b.lastStruggledAt ?? '').localeCompare(a.lastStruggledAt ?? ''))[0];
+function getCardsForDeck(deckId: string, cards: Flashcard[]) {
+  return cards.filter((card) => card.deckId === deckId);
 }
+
+type DeckPreview = {
+  deck: Deck;
+  cards: Flashcard[];
+  mostRecentCard?: Flashcard;
+};
 
 export default function ReviewIndexScreen() {
   const router = useRouter();
@@ -50,16 +46,21 @@ export default function ReviewIndexScreen() {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [cards, setCards] = useState<Flashcard[]>([]);
 
-  /**
-   * Simple responsive breakpoint. On wider screens and landscape tablets, the
-   * preview panels sit beside each other instead of stacking vertically.
-   */
-  const twoColumn = width >= 820;
+  const panelWidth = Math.min(Math.max(width - SPACING.lg * 2, 300), 430);
 
-  const mostRecentCard = useMemo(() => getMostRecentCard(cards), [cards]);
-  const mostStruggledCard = useMemo(() => getMostRecentlyStruggledCard(cards), [cards]);
-  const mostRecentDeck = mostRecentCard ? findDeck(mostRecentCard.deckId, decks) : undefined;
-  const mostStruggledDeck = mostStruggledCard ? findDeck(mostStruggledCard.deckId, decks) : undefined;
+  const deckPreviews = useMemo<DeckPreview[]>(
+    () =>
+      decks.map((deck) => {
+        const deckCards = getCardsForDeck(deck.id, cards);
+
+        return {
+          deck,
+          cards: deckCards,
+          mostRecentCard: getMostRecentCard(deckCards),
+        };
+      }),
+    [cards, decks]
+  );
 
   /**
    * useFocusEffect runs each time this screen becomes active.
@@ -88,6 +89,19 @@ export default function ReviewIndexScreen() {
     });
   }
 
+  function renderRetentionNote() {
+    return (
+      <View style={styles.retentionNote}>
+        <CrayonFill tone="warning" variant="dense" opacity={0.45} />
+        <Text style={styles.noteTitle}>How to get the most from spaced repetition</Text>
+        <Text style={styles.noteText}>
+          Review due cards consistently, answer before revealing, and grade honestly. Missed cards
+          return quickly; easy cards wait longer, focusing effort right before forgetting.
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView
       style={styles.screen}
@@ -100,47 +114,48 @@ export default function ReviewIndexScreen() {
       ]}>
       <View style={styles.header}>
         <Text style={styles.eyebrow}>Review</Text>
-        <Text style={styles.title}>Choose a deck to Review.</Text>
-        <Text style={styles.subtitle}>Open either deck to start a focused review session.</Text>
+        <Text style={styles.title}>Choose a deck to review.</Text>
+        <Text style={styles.subtitle}>
+          Swipe through your current decks and open the one you want to study.
+        </Text>
         <Pressable
           accessibilityRole="button"
           onPress={() => router.push('/')}
           style={({ pressed }) => [styles.createButton, pressed && styles.pressed]}>
+          <CrayonFill tone="create" variant="tight" opacity={0.78} />
           <Text style={styles.createButtonText}>Create cards</Text>
         </Pressable>
       </View>
 
-      <View style={[styles.previewGrid, twoColumn && styles.previewGridWide]}>
-        <PreviewPanel
-          title="Most recent card"
-          helper="The newest prompt you created."
-          card={mostRecentCard}
-          deck={mostRecentDeck}
-          emptyText="Create a card first, then its deck will be available here."
-          deckId={mostRecentDeck?.id}
-          onOpenDeck={() => openDeck(mostRecentDeck?.id)}
-        />
-
-        <PreviewPanel
-          title="Most recently struggled"
-          helper="The last card marked Again or Hard."
-          card={mostStruggledCard}
-          deck={mostStruggledDeck}
-          emptyText="Use retention mode and rate a card Again or Hard to populate this preview."
-          footer={
-            <View style={styles.retentionNote}>
-              <Text style={styles.noteTitle}>How to get the most from spaced repetition</Text>
-              <Text style={styles.noteText}>
-                Review due cards consistently, answer before revealing, and grade honestly. Missed
-                cards return quickly; easy cards wait longer, focusing effort right before
-                forgetting.
-              </Text>
-            </View>
-          }
-          deckId={mostStruggledDeck?.id}
-          onOpenDeck={() => openDeck(mostStruggledDeck?.id)}
-        />
-      </View>
+      {deckPreviews.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.deckCarousel}>
+          {deckPreviews.map((item, index) => (
+            <PreviewPanel
+              key={item.deck.id}
+              title={item.deck.name}
+              helper={`${item.cards.length} ${item.cards.length === 1 ? 'card' : 'cards'} in this deck.`}
+              card={item.mostRecentCard}
+              deck={item.deck}
+              emptyText="Add cards to this deck from the Create section, then come back here to review."
+              footer={index === 0 ? renderRetentionNote() : undefined}
+              deckId={item.deck.id}
+              buttonLabel="Review this deck"
+              onOpenDeck={() => openDeck(item.deck.id)}
+              style={{ width: panelWidth }}
+            />
+          ))}
+        </ScrollView>
+      ) : (
+        <View style={styles.emptyDeckState}>
+          <Text style={styles.emptyDeckTitle}>No decks yet</Text>
+          <Text style={styles.emptyDeckText}>
+            Create a deck first, then it will appear here as a review block.
+          </Text>
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -159,7 +174,7 @@ const styles = StyleSheet.create({
     maxWidth: 820,
   },
   eyebrow: {
-    color: COLORS.review,
+    color: COLORS.reviewDeep,
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.6,
@@ -177,31 +192,33 @@ const styles = StyleSheet.create({
     lineHeight: 23,
   },
   createButton: {
+    position: 'relative',
+    overflow: 'hidden',
     alignSelf: 'flex-start',
     minHeight: 44,
     borderRadius: RADIUS.md,
     paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.reviewSoft,
-    borderColor: COLORS.review,
+    backgroundColor: COLORS.createSoft,
+    borderColor: COLORS.createCrayon,
     borderWidth: 1,
   },
   createButtonText: {
-    color: COLORS.review,
+    color: COLORS.createDeep,
     fontSize: 15,
     fontWeight: '800',
   },
-  previewGrid: {
+  deckCarousel: {
     gap: SPACING.md,
-  },
-  previewGridWide: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
+    paddingRight: SPACING.lg,
+    paddingVertical: 4,
   },
   retentionNote: {
+    position: 'relative',
+    overflow: 'hidden',
     backgroundColor: COLORS.warningSoft,
-    borderColor: '#F2C47D',
+    borderColor: COLORS.warningCrayon,
     borderWidth: 1,
     borderRadius: RADIUS.md,
     padding: 12,
@@ -216,6 +233,24 @@ const styles = StyleSheet.create({
     color: COLORS.ink,
     fontSize: 13,
     lineHeight: 18,
+  },
+  emptyDeckState: {
+    backgroundColor: COLORS.panel,
+    borderColor: COLORS.line,
+    borderWidth: 1,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+    gap: 8,
+  },
+  emptyDeckTitle: {
+    color: COLORS.ink,
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  emptyDeckText: {
+    color: COLORS.muted,
+    fontSize: 15,
+    lineHeight: 21,
   },
   pressed: {
     opacity: 0.9,

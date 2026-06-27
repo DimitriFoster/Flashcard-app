@@ -19,14 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HomeCreateSection } from '@/components/home/create-section';
 import { HomeReviewSection } from '@/components/home/review-section';
 import { COLORS, SPACING } from '@/constants/design';
-import {
-  addDeck,
-  addFlashcard,
-  deleteDeck,
-  deleteFlashcard,
-  getDecks,
-  getFlashcards,
-} from '@/storage/flashcards';
+import { addDeck, addFlashcard, getDecks, getFlashcards } from '@/storage/flashcards';
 import type { Deck, Flashcard, NewFlashcard } from '@/types/flashcard';
 
 export default function HomeScreen() {
@@ -95,38 +88,6 @@ export default function HomeScreen() {
     return card;
   }
 
-
-  /**
-   * Deletes a whole deck and every card inside it, then selects the next
-   * available deck so the create form never points at deleted data.
-   */
-  function removeDeck(deckId: string) {
-    const result = deleteDeck(deckId);
-
-    if (!result) {
-      return undefined;
-    }
-
-    setDecks(result.decks);
-    setCards(result.flashcards);
-    setSelectedDeckId(result.decks[0]?.id ?? '');
-
-    return result;
-  }
-
-  /** Deletes one saved card and mirrors the storage change into local state. */
-  function removeCard(cardId: string) {
-    const card = cards.find((candidate) => candidate.id === cardId);
-
-    if (!card || !deleteFlashcard(cardId)) {
-      return undefined;
-    }
-
-    setCards((previousCards) => previousCards.filter((candidate) => candidate.id !== cardId));
-
-    return card;
-  }
-
   return (
     <ScrollView
       style={styles.screen}
@@ -156,8 +117,6 @@ export default function HomeScreen() {
         onSelectDeckId={setSelectedDeckId}
         onCreateDeck={createDeck}
         onCreateCard={createCard}
-        onDeleteDeck={removeDeck}
-        onDeleteCard={removeCard}
       />
 
       {/* Navigation is handled here so the child component stays presentation-focused. */}

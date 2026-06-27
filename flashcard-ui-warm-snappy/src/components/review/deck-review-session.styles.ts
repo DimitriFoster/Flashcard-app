@@ -29,8 +29,6 @@ export const styles = StyleSheet.create({
     gap: 3,
   },
   backButton: {
-    position: 'relative',
-    overflow: 'hidden',
     alignSelf: 'flex-start',
     minHeight: 40,
     borderRadius: RADIUS.md,
@@ -38,15 +36,15 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.reviewSoft,
-    borderColor: COLORS.reviewCrayon,
+    borderColor: COLORS.review,
     borderWidth: 1,
   },
   backButtonText: {
-    color: COLORS.reviewDeep,
+    color: COLORS.review,
     fontWeight: '800',
   },
   eyebrow: {
-    color: COLORS.reviewDeep,
+    color: COLORS.review,
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.6,
@@ -72,15 +70,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardStack: {
-    position: 'relative',
     alignSelf: 'stretch',
-  },
-  stageCrayon: {
-    top: -24,
-    bottom: -24,
-    left: -18,
-    right: -18,
-    borderRadius: RADIUS.xl,
   },
   cardStackLandscape: {
     width: '72%',
@@ -93,7 +83,7 @@ export const styles = StyleSheet.create({
     right: 28,
     bottom: -22,
     borderRadius: RADIUS.xl,
-    backgroundColor: COLORS.reviewPaper,
+    backgroundColor: '#E6D9CA',
     opacity: 0.6,
     transform: [{ rotate: '-2deg' }],
   },
@@ -104,7 +94,7 @@ export const styles = StyleSheet.create({
     right: 16,
     bottom: -12,
     borderRadius: RADIUS.xl,
-    backgroundColor: COLORS.reviewSoft,
+    backgroundColor: '#F0E5D7',
     opacity: 0.9,
     transform: [{ rotate: '1.5deg' }],
   },
@@ -116,7 +106,7 @@ export const styles = StyleSheet.create({
     borderRadius: RADIUS.xl,
     padding: 28,
     backgroundColor: COLORS.panel,
-    borderColor: COLORS.reviewCrayon,
+    borderColor: COLORS.line,
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
@@ -130,7 +120,7 @@ export const styles = StyleSheet.create({
     minHeight: 260,
   },
   cardSide: {
-    color: COLORS.reviewDeep,
+    color: COLORS.review,
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.6,
@@ -163,8 +153,6 @@ export const styles = StyleSheet.create({
     width: '72%',
   },
   gradeButton: {
-    position: 'relative',
-    overflow: 'hidden',
     flex: 1,
     minWidth: '45%',
     minHeight: 54,
@@ -186,19 +174,19 @@ export const styles = StyleSheet.create({
   },
   againButton: {
     backgroundColor: COLORS.warningSoft,
-    borderColor: COLORS.warningCrayon,
+    borderColor: '#F2C47D',
   },
   hardButton: {
     backgroundColor: COLORS.dangerSoft,
-    borderColor: COLORS.dangerCrayon,
+    borderColor: '#F0A296',
   },
   goodButton: {
     backgroundColor: COLORS.reviewSoft,
-    borderColor: COLORS.reviewCrayon,
+    borderColor: COLORS.review,
   },
   easyButton: {
     backgroundColor: COLORS.createSoft,
-    borderColor: COLORS.createCrayon,
+    borderColor: COLORS.create,
   },
   againText: {
     color: COLORS.warning,
@@ -207,15 +195,15 @@ export const styles = StyleSheet.create({
     color: COLORS.danger,
   },
   goodText: {
-    color: COLORS.reviewDeep,
+    color: COLORS.review,
   },
   easyText: {
-    color: COLORS.createDeep,
+    color: COLORS.create,
   },
   emptyState: {
     borderRadius: RADIUS.lg,
     backgroundColor: COLORS.panel,
-    borderColor: COLORS.reviewCrayon,
+    borderColor: COLORS.line,
     borderWidth: 1,
     padding: 22,
     alignItems: 'center',

@@ -59,6 +59,16 @@ export default function DeckReviewScreen() {
   const currentCard = cards[currentIndex];
 
   /**
+   * Any actual card change should return the review card to the prompt side.
+   * This protects swipe navigation from leaving the next card visually stale or
+   * stuck on an empty answer face before the user grades anything.
+   */
+  useEffect(() => {
+    setFlipped(false);
+    translateX.setValue(0);
+  }, [currentCard?.id, translateX]);
+
+  /**
    * Refresh local state whenever this screen becomes active.
    * This allows Home/Review changes to show up without restarting the app.
    */
@@ -179,11 +189,34 @@ export default function DeckReviewScreen() {
    */
   const panResponder = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > 12,
+      /**
+       * Let the card surface own both tap and swipe gestures.
+       *
+       * A nested Pressable inside a PanResponder can look pressed but still fail
+       * to fire onPress reliably on mobile. Handling tap-to-flip here avoids that
+       * responder conflict.
+       */
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        Math.abs(gestureState.dx) > 6 || Math.abs(gestureState.dy) > 6,
       onPanResponderMove: (_, gestureState) => {
-        translateX.setValue(gestureState.dx);
+        if (Math.abs(gestureState.dx) > 4) {
+          translateX.setValue(gestureState.dx);
+        }
       },
       onPanResponderRelease: (_, gestureState) => {
+        const absDx = Math.abs(gestureState.dx);
+        const absDy = Math.abs(gestureState.dy);
+
+        /**
+         * Treat a small movement as a tap. This is now the official flip action.
+         */
+        if (absDx < 12 && absDy < 12) {
+          setFlipped((value) => !value);
+          translateX.setValue(0);
+          return;
+        }
+
         if (gestureState.dx < -90) {
           animateCardOffscreen('left');
           return;
@@ -213,7 +246,6 @@ export default function DeckReviewScreen() {
       translateX={translateX}
       panHandlers={panResponder.panHandlers}
       onBack={() => router.push('/review')}
-      onToggleFlip={() => setFlipped((value) => !value)}
       onGrade={handleGrade}
     />
   );

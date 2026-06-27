@@ -1,34 +1,28 @@
 import type { ViewStyle } from 'react-native';
 
 export const COLORS = {
-  background: '#FFF8ED',
-  panel: '#FFFEF8',
-  panelAlt: '#F7EDDF',
-  ink: '#2A241F',
-  muted: '#7A6C5E',
-  line: '#E7D7C4',
+  background: '#F8F3EA',
+  panel: '#FFFDF8',
+  panelAlt: '#F1E8DC',
+  ink: '#241F1A',
+  muted: '#776B5F',
+  line: '#E2D3C3',
 
-  create: '#5DBB8E',
-  createSoft: '#E3F7EC',
-  createPaper: '#DDF3E6',
-  createCrayon: '#82CFA6',
-  createDeep: '#2E755B',
+  create: '#138A72',
+  createSoft: '#DDF5EC',
+  createDeep: '#0C5F4F',
 
-  review: '#6F91EA',
-  reviewSoft: '#E7EEFF',
-  reviewPaper: '#DEE9FF',
-  reviewCrayon: '#94AFF3',
-  reviewDeep: '#405FB8',
+  review: '#3457D5',
+  reviewSoft: '#E8EDFF',
+  reviewDeep: '#243A96',
 
-  warning: '#B87524',
-  warningSoft: '#FFF1D8',
-  warningCrayon: '#F2C779',
-  danger: '#D85B4A',
-  dangerSoft: '#FDE9E4',
-  dangerCrayon: '#F3A095',
+  warning: '#B86A12',
+  warningSoft: '#FFF2D9',
+  danger: '#D94A38',
+  dangerSoft: '#FDE8E3',
 
   white: '#FFFFFF',
-  disabled: '#E3D9CD',
+  disabled: '#DED6CB',
 } as const;
 
 export const RADIUS = {
@@ -51,14 +45,14 @@ export const SPACING = {
 export const SHADOWS = {
   card: {
     shadowColor: '#000000',
-    shadowOpacity: 0.07,
+    shadowOpacity: 0.08,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
     elevation: 3,
   } satisfies ViewStyle,
   soft: {
     shadowColor: '#000000',
-    shadowOpacity: 0.045,
+    shadowOpacity: 0.05,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,

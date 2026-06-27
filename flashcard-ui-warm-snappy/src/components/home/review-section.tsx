@@ -8,7 +8,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { CrayonFill } from '@/components/ui/crayon-fill';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/design';
 
 type HomeReviewSectionProps = {
@@ -18,7 +17,6 @@ type HomeReviewSectionProps = {
 export function HomeReviewSection({ onPressReview }: HomeReviewSectionProps) {
   return (
     <View style={[styles.section, styles.reviewSection]}>
-      <CrayonFill tone="review" variant="loose" opacity={0.44} />
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionLabel, styles.reviewSectionLabel]}>review</Text>
         <Text style={styles.sectionKicker}>Jump into spaced repetition when you’re ready.</Text>
@@ -28,7 +26,6 @@ export function HomeReviewSection({ onPressReview }: HomeReviewSectionProps) {
         accessibilityRole="button"
         onPress={onPressReview}
         style={({ pressed }) => [styles.reviewButton, pressed && styles.pressed]}>
-        <CrayonFill tone="review" variant="tight" opacity={0.82} />
         <Text style={styles.reviewButtonText}>Review</Text>
       </Pressable>
     </View>
@@ -46,22 +43,17 @@ const styles = StyleSheet.create({
     ...SHADOWS.soft,
   },
   reviewSection: {
-    position: 'relative',
-    overflow: 'hidden',
-    backgroundColor: COLORS.reviewPaper,
-    borderColor: COLORS.reviewCrayon,
     borderTopColor: COLORS.review,
     borderTopWidth: 4,
   },
   reviewSectionLabel: {
-    color: COLORS.reviewDeep,
+    color: COLORS.review,
   },
   sectionHeader: {
-    position: 'relative',
     gap: 4,
   },
   sectionLabel: {
-    color: COLORS.reviewDeep,
+    color: COLORS.review,
     fontSize: 28,
     fontWeight: '800',
   },
@@ -71,10 +63,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   reviewButton: {
-    position: 'relative',
-    overflow: 'hidden',
     backgroundColor: COLORS.reviewSoft,
-    borderColor: COLORS.reviewCrayon,
+    borderColor: COLORS.review,
     borderWidth: 1,
     borderRadius: RADIUS.md,
     minHeight: 48,
@@ -82,7 +72,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   reviewButtonText: {
-    color: COLORS.reviewDeep,
+    color: COLORS.review,
     fontSize: 16,
     fontWeight: '800',
   },

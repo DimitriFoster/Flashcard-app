@@ -1,20 +1,12 @@
 /**
  * PreviewPanel.
  *
- * Reusable deck preview block used by the Review index screen.
- * It displays one representative card and provides a deck-specific review action.
+ * Reusable card preview used by the Review index screen.
+ * It displays a single candidate card and provides an "Open this deck" action.
  */
 import React from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { CrayonFill } from '@/components/ui/crayon-fill';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/design';
 import type { Deck, Flashcard } from '@/types/flashcard';
 
@@ -45,9 +37,7 @@ type PreviewPanelProps = {
   emptyText: string;
   footer?: React.ReactNode;
   deckId?: string;
-  buttonLabel?: string;
   onOpenDeck: () => void;
-  style?: StyleProp<ViewStyle>;
 };
 
 export function PreviewPanel({
@@ -58,24 +48,16 @@ export function PreviewPanel({
   emptyText,
   footer,
   deckId,
-  buttonLabel = 'Open this deck',
   onOpenDeck,
-  style,
 }: PreviewPanelProps) {
   return (
-    <View style={[styles.previewPanel, style]}>
-      <CrayonFill tone="review" variant="loose" opacity={0.38} />
+    <View style={styles.previewPanel}>
       <View style={styles.previewHeader}>
         <View style={styles.previewTitleGroup}>
           <Text style={styles.previewTitle}>{title}</Text>
           <Text style={styles.previewHelper}>{helper}</Text>
         </View>
-        {deck && (
-          <View style={styles.deckBadge}>
-            <CrayonFill tone="review" variant="tight" opacity={0.75} />
-            <Text style={styles.deckBadgeText}>{deck.name}</Text>
-          </View>
-        )}
+        {deck && <Text style={styles.deckBadge}>{deck.name}</Text>}
       </View>
 
       {card ? (
@@ -89,7 +71,7 @@ export function PreviewPanel({
         </View>
       ) : (
         <View style={styles.previewEmpty}>
-          <Text style={styles.emptyTitle}>No cards yet</Text>
+          <Text style={styles.emptyTitle}>Nothing to preview yet</Text>
           <Text style={styles.emptyText}>{emptyText}</Text>
         </View>
       )}
@@ -103,9 +85,8 @@ export function PreviewPanel({
           !deckId && styles.disabledButton,
           pressed && deckId && styles.pressed,
         ]}>
-        {deckId ? <CrayonFill tone="review" variant="tight" opacity={0.85} /> : null}
         <Text style={[styles.openDeckButtonText, !deckId && styles.disabledButtonText]}>
-          {buttonLabel}
+          Open this deck
         </Text>
       </Pressable>
 
@@ -116,14 +97,12 @@ export function PreviewPanel({
 
 const styles = StyleSheet.create({
   previewPanel: {
-    position: 'relative',
-    overflow: 'hidden',
     flex: 1,
     minHeight: 420,
     borderRadius: RADIUS.lg,
-    backgroundColor: COLORS.reviewPaper,
+    backgroundColor: COLORS.panel,
     borderWidth: 1,
-    borderColor: COLORS.reviewCrayon,
+    borderColor: COLORS.line,
     padding: SPACING.md,
     gap: SPACING.md,
     ...SHADOWS.soft,
@@ -149,17 +128,12 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   deckBadge: {
-    position: 'relative',
-    overflow: 'hidden',
+    color: COLORS.review,
     backgroundColor: COLORS.reviewSoft,
-    borderColor: COLORS.reviewCrayon,
-    borderWidth: 1,
     borderRadius: RADIUS.pill,
+    overflow: 'hidden',
     paddingHorizontal: 10,
     paddingVertical: 5,
-  },
-  deckBadgeText: {
-    color: COLORS.reviewDeep,
     fontSize: 12,
     fontWeight: '800',
   },
@@ -193,7 +167,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   previewMeta: {
-    color: COLORS.reviewDeep,
+    color: COLORS.review,
     fontSize: 12,
     fontWeight: '800',
   },
@@ -221,18 +195,14 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   openDeckButton: {
-    position: 'relative',
-    overflow: 'hidden',
     minHeight: 44,
     borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.reviewSoft,
-    borderColor: COLORS.reviewCrayon,
-    borderWidth: 1,
+    backgroundColor: COLORS.review,
   },
   openDeckButtonText: {
-    color: COLORS.reviewDeep,
+    color: COLORS.white,
     fontSize: 15,
     fontWeight: '800',
   },

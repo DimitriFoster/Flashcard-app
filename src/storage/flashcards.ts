@@ -266,6 +266,36 @@ export function reviewFlashcard(id: string, grade: ReviewGrade) {
   return reviewedFlashcard;
 }
 
+
+export function deleteDeck(id: string) {
+  if (!canUseStorage()) {
+    return undefined;
+  }
+
+  const decks = getDecks();
+  const deckToDelete = decks.find((deck) => deck.id === id);
+
+  if (!deckToDelete) {
+    return undefined;
+  }
+
+  const flashcards = getFlashcards();
+  const nextFlashcards = flashcards.filter((flashcard) => flashcard.deckId !== id);
+  const remainingDecks = decks.filter((deck) => deck.id !== id);
+  const nextDecks = remainingDecks.length > 0 ? remainingDecks : [createDefaultDeck()];
+  const deletedCards = flashcards.length - nextFlashcards.length;
+
+  saveDecks(nextDecks);
+  saveFlashcards(nextFlashcards);
+
+  return {
+    deck: deckToDelete,
+    deletedCards,
+    decks: nextDecks,
+    flashcards: nextFlashcards,
+  };
+}
+
 export function deleteFlashcard(id: string) {
   if (!canUseStorage()) {
     return false;
