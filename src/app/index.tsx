@@ -25,10 +25,15 @@ import {
   addFlashcard,
   deleteDeck,
   deleteFlashcard,
+  exportAppBackupText,
   getDecks,
   getFlashcards,
+  importAppBackupText,
+  importParsedCards,
 } from '@/storage/flashcards';
 import type { Deck, Flashcard, NewFlashcard } from '@/types/flashcard';
+import type { ImportCardsOptions } from '@/storage/flashcards';
+import type { ParsedImportCard } from '@/lib/import-parser';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -128,6 +133,34 @@ export default function HomeScreen() {
     return card;
   }
 
+
+  function importCards(cardsToImport: ParsedImportCard[], options: ImportCardsOptions) {
+    const result = importParsedCards(cardsToImport, options);
+
+    setDecks(result.decks);
+    setCards(result.flashcards);
+
+    if (result.createdDeck) {
+      setSelectedDeckId(result.createdDeck.id);
+    }
+
+    return result;
+  }
+
+  function importBackup(rawText: string) {
+    const result = importAppBackupText(rawText);
+
+    if (!result) {
+      return undefined;
+    }
+
+    setDecks(result.decks);
+    setCards(result.flashcards);
+    setSelectedDeckId(result.decks[0]?.id ?? '');
+
+    return result;
+  }
+
   return (
     <ScrollView
       style={styles.screen}
@@ -159,6 +192,9 @@ export default function HomeScreen() {
         onCreateCard={createCard}
         onDeleteDeck={removeDeck}
         onDeleteCard={removeCard}
+        onImportCards={importCards}
+        onExportBackup={exportAppBackupText}
+        onImportBackup={importBackup}
       />
 
       {/* Navigation is handled here so the child component stays presentation-focused. */}

@@ -13,6 +13,7 @@ import {
   Animated,
   Pressable,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
   type PanResponderInstance,
@@ -23,7 +24,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CrayonFill, type CrayonTone, type CrayonVariant } from '@/components/ui/crayon-fill';
-import { styles } from './deck-review-session.styles';
+import { COLORS, styles } from './deck-review-session.styles';
 import type { Flashcard, ReviewGrade } from '@/types/flashcard';
 
 type DeckReviewSessionProps = {
@@ -35,7 +36,17 @@ type DeckReviewSessionProps = {
   translateX: Animated.Value;
   panHandlers: PanResponderInstance['panHandlers'];
   showGradeButtons?: boolean;
+  showUndoButton?: boolean;
+  isEditing?: boolean;
+  editFront?: string;
+  editBack?: string;
+  onChangeEditFront?: (value: string) => void;
+  onChangeEditBack?: (value: string) => void;
+  onStartEdit?: () => void;
+  onCancelEdit?: () => void;
+  onSaveEdit?: () => void;
   onBack: () => void;
+  onUndo?: () => void;
   onGrade: (grade: ReviewGrade) => void;
 };
 
@@ -95,7 +106,17 @@ export function DeckReviewSession({
   translateX,
   panHandlers,
   showGradeButtons = true,
+  showUndoButton = false,
+  isEditing = false,
+  editFront = '',
+  editBack = '',
+  onChangeEditFront,
+  onChangeEditBack,
+  onStartEdit,
+  onCancelEdit,
+  onSaveEdit,
   onBack,
+  onUndo,
   onGrade,
 }: DeckReviewSessionProps) {
   const insets = useSafeAreaInsets();
@@ -117,25 +138,89 @@ export function DeckReviewSession({
         },
       ]}>
       <View style={[styles.header, isLandscape && styles.headerLandscape]}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={onBack}
-          style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
-          <CrayonFill tone="review" variant="tight" opacity={0.7} />
-          <Text style={styles.backButtonText}>Back</Text>
-        </Pressable>
+        <View style={styles.headerButtonGroup}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onBack}
+            style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
+            <CrayonFill tone="review" variant="tight" opacity={0.7} />
+            <Text style={styles.backButtonText}>Back</Text>
+          </Pressable>
+
+          {showUndoButton && onUndo ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={onUndo}
+              style={({ pressed }) => [styles.undoButton, pressed && styles.pressed]}>
+              <CrayonFill tone="warning" variant="tight" opacity={0.62} />
+              <Text style={styles.undoButtonText}>Undo</Text>
+            </Pressable>
+          ) : null}
+
+          {currentCard && onStartEdit ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={onStartEdit}
+              style={({ pressed }) => [styles.editButton, pressed && styles.pressed]}>
+              <CrayonFill tone="create" variant="tight" opacity={0.58} />
+              <Text style={styles.editButtonText}>Edit</Text>
+            </Pressable>
+          ) : null}
+        </View>
 
         <View style={styles.headerTextGroup}>
           <Text style={styles.eyebrow}>Deck Review</Text>
           <Text style={styles.title}>{deckName ?? 'Deck not found'}</Text>
           <Text style={styles.subtitle}>
-            {cardsLength > 0 ? `${currentIndex + 1} of ${cardsLength}` : 'No cards yet'}
+            {cardsLength > 0
+              ? `${currentIndex + 1} of ${cardsLength}`
+              : showGradeButtons
+                ? 'No cards due'
+                : 'No cards yet'}
           </Text>
         </View>
       </View>
 
       <View style={[styles.stage, isLandscape && styles.stageLandscape]}>
-        {currentCard ? (
+        {currentCard && isEditing ? (
+          <View style={[styles.editPanel, isLandscape && styles.cardStackLandscape]}>
+            <CrayonFill tone="create" variant="loose" opacity={0.2} />
+            <Text style={styles.editTitle}>Edit current card</Text>
+            <TextInput
+              multiline
+              value={editFront}
+              onChangeText={onChangeEditFront}
+              placeholder="Prompt / front"
+              placeholderTextColor={COLORS.muted}
+              style={[styles.editInput, styles.editFrontInput]}
+              textAlignVertical="top"
+            />
+            <TextInput
+              multiline
+              value={editBack}
+              onChangeText={onChangeEditBack}
+              placeholder="Answer / back"
+              placeholderTextColor={COLORS.muted}
+              style={[styles.editInput, styles.editBackInput]}
+              textAlignVertical="top"
+            />
+            <View style={styles.editActionRow}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={onCancelEdit ?? (() => undefined)}
+                style={({ pressed }) => [styles.editSecondaryButton, pressed && styles.pressed]}>
+                <Text style={styles.editSecondaryButtonText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={onSaveEdit ?? (() => undefined)}
+                style={({ pressed }) => [styles.editPrimaryButton, pressed && styles.pressed]}>
+                <CrayonFill tone="create" variant="tight" opacity={0.8} />
+                <Text style={styles.editPrimaryButtonText}>Save changes</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : currentCard ? (
           <View style={[styles.cardStack, isLandscape && styles.cardStackLandscape]}>
             <CrayonFill tone="review" variant="loose" opacity={0.16} style={styles.stageCrayon} />
             <View pointerEvents="none" style={styles.cardStackBack} />
@@ -172,13 +257,19 @@ export function DeckReviewSession({
           </View>
         ) : (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>No cards in this deck</Text>
-            <Text style={styles.emptyText}>Go back home and add cards first.</Text>
+            <Text style={styles.emptyTitle}>
+              {showGradeButtons ? 'Nothing due right now' : 'No cards in this deck'}
+            </Text>
+            <Text style={styles.emptyText}>
+              {showGradeButtons
+                ? 'New, learning, and due review cards will appear here when they are ready.'
+                : 'Go back home and add cards first.'}
+            </Text>
           </View>
         )}
       </View>
 
-      {currentCard && showGradeButtons ? (
+      {currentCard && showGradeButtons && !isEditing ? (
         <View style={[styles.gradeRow, isLandscape && styles.gradeRowLandscape]}>
           {gradeButtons.map((button) => (
             <Pressable

@@ -3,24 +3,36 @@
  *
  * This file is the app's local data access layer. Screens should call these
  * functions instead of reading/writing MMKV directly.
- *
- * For an entry-level review project, this is a good separation of concerns:
- * - UI components handle display and events.
- * - Storage helpers handle persistence.
- * - review-scheduling.ts handles the spaced-repetition math.
  */
 import { Platform } from 'react-native';
 
-import { calculateNextReviewState } from '@/lib/review-scheduling';
-import type { Deck, Flashcard, NewDeck, NewFlashcard, ReviewGrade } from '@/types/flashcard';
+import { calculateNextReviewState, getCardState } from '@/lib/review-scheduling';
+import type {
+  Deck,
+  Flashcard,
+  NewDeck,
+  NewFlashcard,
+  ReviewGrade,
+  ReviewLog,
+} from '@/types/flashcard';
+import type { ParsedImportCard } from '@/lib/import-parser';
 
 import { storage } from './mmkv';
 
 const FLASHCARDS_KEY = 'flashcards';
 const DECKS_KEY = 'decks';
+const REVIEW_LOGS_KEY = 'review-logs';
+const LAST_REVIEW_UNDO_KEY = 'last-review-undo';
+const NOTES_KEY = 'notes';
+const NOTEBOOKS_KEY = 'note-notebooks';
 
 /** Stable fallback deck used when the app starts with no saved decks. */
 export const DEFAULT_DECK_ID = 'default-deck';
+
+type LastReviewUndo = {
+  card: Flashcard;
+  logId: string;
+};
 
 /**
  * Safely parse an array from storage.
@@ -37,6 +49,19 @@ function parseJsonArray<T>(value: string | undefined): T[] {
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
+  }
+}
+
+function parseJsonObject<T>(value: string | undefined): T | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? (parsed as T) : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -75,12 +100,26 @@ function saveDecks(decks: Deck[]) {
   storage.set(DECKS_KEY, JSON.stringify(decks));
 }
 
+function saveReviewLogs(logs: ReviewLog[]) {
+  storage.set(REVIEW_LOGS_KEY, JSON.stringify(logs));
+}
+
+function saveLastReviewUndo(value: LastReviewUndo) {
+  storage.set(LAST_REVIEW_UNDO_KEY, JSON.stringify(value));
+}
+
+function clearLastReviewUndo() {
+  storage.remove(LAST_REVIEW_UNDO_KEY);
+}
+
 /**
  * Normalize cards loaded from storage.
  * This doubles as a lightweight migration layer if older cards are missing fields.
  */
 function normalizeFlashcard(card: Partial<Flashcard>): Flashcard {
   const now = new Date().toISOString();
+  const dueAt = card.dueAt;
+  const state = card.state ?? (dueAt ? 'review' : 'new');
 
   return {
     id: card.id ?? createId('card'),
@@ -89,11 +128,14 @@ function normalizeFlashcard(card: Partial<Flashcard>): Flashcard {
     back: card.back ?? '',
     createdAt: card.createdAt ?? now,
     updatedAt: card.updatedAt ?? now,
-    dueAt: card.dueAt,
-    intervalDays: card.intervalDays,
-    easeFactor: card.easeFactor,
-    repetitions: card.repetitions,
-    lapses: card.lapses,
+
+    state,
+    learningStepIndex: card.learningStepIndex ?? 0,
+    dueAt,
+    intervalDays: card.intervalDays ?? 0,
+    easeFactor: card.easeFactor ?? 2.5,
+    repetitions: card.repetitions ?? 0,
+    lapses: card.lapses ?? 0,
     lastReviewedAt: card.lastReviewedAt,
     lastStruggledAt: card.lastStruggledAt,
   };
@@ -108,6 +150,28 @@ function normalizeDeck(deck: Partial<Deck>): Deck {
     name: deck.name?.trim() || 'Untitled Deck',
     createdAt: deck.createdAt ?? now,
     updatedAt: deck.updatedAt ?? now,
+  };
+}
+
+function createReviewLog(previousCard: Flashcard, nextCard: Flashcard, grade: ReviewGrade): ReviewLog {
+  return {
+    id: createId('review-log'),
+    cardId: previousCard.id,
+    deckId: previousCard.deckId,
+    grade,
+    reviewedAt: nextCard.lastReviewedAt ?? new Date().toISOString(),
+
+    previousState: getCardState(previousCard),
+    nextState: getCardState(nextCard),
+
+    previousDueAt: previousCard.dueAt,
+    nextDueAt: nextCard.dueAt,
+
+    previousIntervalDays: previousCard.intervalDays,
+    nextIntervalDays: nextCard.intervalDays,
+
+    previousEaseFactor: previousCard.easeFactor,
+    nextEaseFactor: nextCard.easeFactor,
   };
 }
 
@@ -173,8 +237,20 @@ export function getFlashcards() {
   const rawCards = parseJsonArray<Partial<Flashcard>>(storage.getString(FLASHCARDS_KEY));
   const flashcards = rawCards.map(normalizeFlashcard);
 
-  /** If normalization filled missing deckId values, write the migrated data back. */
-  const needsMigration = rawCards.some((card, index) => card.deckId !== flashcards[index].deckId);
+  /** If normalization filled missing SRS values, write the migrated data back. */
+  const needsMigration = rawCards.some((card, index) => {
+    const normalized = flashcards[index];
+
+    return (
+      card.deckId !== normalized.deckId ||
+      card.state !== normalized.state ||
+      card.learningStepIndex !== normalized.learningStepIndex ||
+      card.intervalDays !== normalized.intervalDays ||
+      card.easeFactor !== normalized.easeFactor ||
+      card.repetitions !== normalized.repetitions ||
+      card.lapses !== normalized.lapses
+    );
+  });
 
   if (needsMigration) {
     saveFlashcards(flashcards);
@@ -200,6 +276,13 @@ export function addFlashcard(input: NewFlashcard) {
     back: input.back,
     createdAt: now,
     updatedAt: now,
+
+    state: 'new',
+    learningStepIndex: 0,
+    intervalDays: 0,
+    easeFactor: 2.5,
+    repetitions: 0,
+    lapses: 0,
   };
 
   const flashcards = [flashcard, ...getFlashcards()];
@@ -237,6 +320,22 @@ export function updateFlashcard(id: string, input: Partial<NewFlashcard>) {
   return updatedFlashcard;
 }
 
+export function getReviewLogs() {
+  if (!canUseStorage()) {
+    return [];
+  }
+
+  return parseJsonArray<ReviewLog>(storage.getString(REVIEW_LOGS_KEY));
+}
+
+export function getLastReviewUndo() {
+  if (!canUseStorage()) {
+    return undefined;
+  }
+
+  return parseJsonObject<LastReviewUndo>(storage.getString(LAST_REVIEW_UNDO_KEY));
+}
+
 export function reviewFlashcard(id: string, grade: ReviewGrade) {
   if (!canUseStorage()) {
     return undefined;
@@ -244,12 +343,14 @@ export function reviewFlashcard(id: string, grade: ReviewGrade) {
 
   const now = new Date().toISOString();
   let reviewedFlashcard: Flashcard | undefined;
+  let previousFlashcard: Flashcard | undefined;
 
   const flashcards = getFlashcards().map((flashcard) => {
     if (flashcard.id !== id) {
       return flashcard;
     }
 
+    previousFlashcard = flashcard;
     reviewedFlashcard = {
       ...flashcard,
       ...calculateNextReviewState(flashcard, grade),
@@ -259,13 +360,244 @@ export function reviewFlashcard(id: string, grade: ReviewGrade) {
     return reviewedFlashcard;
   });
 
-  if (reviewedFlashcard) {
+  if (reviewedFlashcard && previousFlashcard) {
+    const log = createReviewLog(previousFlashcard, reviewedFlashcard, grade);
+    const logs = [log, ...getReviewLogs()];
+
     saveFlashcards(flashcards);
+    saveReviewLogs(logs);
+    saveLastReviewUndo({
+      card: previousFlashcard,
+      logId: log.id,
+    });
   }
 
   return reviewedFlashcard;
 }
 
+export function undoLastReview() {
+  if (!canUseStorage()) {
+    return undefined;
+  }
+
+  const undo = getLastReviewUndo();
+
+  if (!undo) {
+    return undefined;
+  }
+
+  let restoredCard: Flashcard | undefined;
+  const flashcards = getFlashcards().map((flashcard) => {
+    if (flashcard.id !== undo.card.id) {
+      return flashcard;
+    }
+
+    restoredCard = undo.card;
+    return undo.card;
+  });
+
+  if (!restoredCard) {
+    clearLastReviewUndo();
+    return undefined;
+  }
+
+  saveFlashcards(flashcards);
+  saveReviewLogs(getReviewLogs().filter((log) => log.id !== undo.logId));
+  clearLastReviewUndo();
+
+  return restoredCard;
+}
+
+
+export type ImportCardsOptions = {
+  mode: 'existingDeck' | 'newDeck';
+  existingDeckId?: string;
+  newDeckName?: string;
+  skipDuplicates?: boolean;
+};
+
+export type ImportCardsResult = {
+  importedCards: number;
+  skippedDuplicates: number;
+  skippedRows: number;
+  createdDeck?: Deck;
+  decks: Deck[];
+  flashcards: Flashcard[];
+};
+
+export type AppBackup = {
+  version: 1;
+  exportedAt: string;
+  decks: Deck[];
+  flashcards: Flashcard[];
+  reviewLogs: ReviewLog[];
+  notes: unknown[];
+  notebooks: unknown[];
+};
+
+function createNewImportedFlashcard(input: NewFlashcard): Flashcard {
+  const now = new Date().toISOString();
+
+  return {
+    id: createId('card'),
+    deckId: input.deckId,
+    front: input.front,
+    back: input.back,
+    createdAt: now,
+    updatedAt: now,
+
+    state: 'new',
+    learningStepIndex: 0,
+    intervalDays: 0,
+    easeFactor: 2.5,
+    repetitions: 0,
+    lapses: 0,
+  };
+}
+
+export function importParsedCards(cards: ParsedImportCard[], options: ImportCardsOptions): ImportCardsResult {
+  if (!canUseStorage()) {
+    throw new Error('Flashcard import is only available on the client.');
+  }
+
+  const existingDecks = getDecks();
+  const existingCards = getFlashcards();
+  let decks = existingDecks;
+  let createdDeck: Deck | undefined;
+  let targetDeckId = options.existingDeckId;
+
+  if (options.mode === 'newDeck') {
+    createdDeck = addDeck({ name: options.newDeckName?.trim() || 'Imported Deck' });
+    decks = getDecks();
+    targetDeckId = createdDeck.id;
+  }
+
+  if (!targetDeckId) {
+    return {
+      importedCards: 0,
+      skippedDuplicates: 0,
+      skippedRows: cards.length,
+      createdDeck,
+      decks,
+      flashcards: existingCards,
+    };
+  }
+
+  const duplicateKeys = new Set(
+    existingCards.map((card) => `${card.deckId}::${card.front.trim().toLowerCase()}::${card.back.trim().toLowerCase()}`)
+  );
+
+  let skippedDuplicates = 0;
+  let skippedRows = 0;
+  const importedFlashcards: Flashcard[] = [];
+
+  for (const card of cards) {
+    const front = card.front.trim();
+    const back = card.back.trim();
+
+    if (!front || !back) {
+      skippedRows += 1;
+      continue;
+    }
+
+    const deckId = targetDeckId;
+    const duplicateKey = `${deckId}::${front.toLowerCase()}::${back.toLowerCase()}`;
+
+    if (options.mode === 'existingDeck' && options.skipDuplicates && duplicateKeys.has(duplicateKey)) {
+      skippedDuplicates += 1;
+      continue;
+    }
+
+    duplicateKeys.add(duplicateKey);
+    importedFlashcards.push(createNewImportedFlashcard({ deckId, front, back }));
+  }
+
+  const flashcards = [...importedFlashcards, ...getFlashcards()];
+  saveFlashcards(flashcards);
+  clearLastReviewUndo();
+
+  return {
+    importedCards: importedFlashcards.length,
+    skippedDuplicates,
+    skippedRows,
+    createdDeck,
+    decks: getDecks(),
+    flashcards: getFlashcards(),
+  };
+}
+
+export function exportAppBackup(): AppBackup {
+  if (!canUseStorage()) {
+    return {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      decks: [],
+      flashcards: [],
+      reviewLogs: [],
+      notes: [],
+      notebooks: [],
+    };
+  }
+
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    decks: getDecks(),
+    flashcards: getFlashcards(),
+    reviewLogs: getReviewLogs(),
+    notes: parseJsonArray<unknown>(storage.getString(NOTES_KEY)),
+    notebooks: parseJsonArray<unknown>(storage.getString(NOTEBOOKS_KEY)),
+  };
+}
+
+export function exportAppBackupText() {
+  return JSON.stringify(exportAppBackup(), null, 2);
+}
+
+export type ImportAppBackupResult = {
+  decks: Deck[];
+  flashcards: Flashcard[];
+  reviewLogs: ReviewLog[];
+  notes: unknown[];
+  notebooks: unknown[];
+};
+
+export function importAppBackupText(rawText: string): ImportAppBackupResult | undefined {
+  if (!canUseStorage()) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(rawText) as Partial<AppBackup>;
+
+    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.decks) || !Array.isArray(parsed.flashcards)) {
+      return undefined;
+    }
+
+    const decks = parsed.decks.map(normalizeDeck);
+    const flashcards = parsed.flashcards.map(normalizeFlashcard);
+    const reviewLogs = Array.isArray(parsed.reviewLogs) ? parsed.reviewLogs : [];
+    const notes = Array.isArray(parsed.notes) ? parsed.notes : [];
+    const notebooks = Array.isArray(parsed.notebooks) ? parsed.notebooks : [];
+
+    saveDecks(decks.length > 0 ? decks : [createDefaultDeck()]);
+    saveFlashcards(flashcards);
+    saveReviewLogs(reviewLogs);
+    storage.set(NOTES_KEY, JSON.stringify(notes));
+    storage.set(NOTEBOOKS_KEY, JSON.stringify(notebooks));
+    clearLastReviewUndo();
+
+    return {
+      decks: getDecks(),
+      flashcards: getFlashcards(),
+      reviewLogs: getReviewLogs(),
+      notes,
+      notebooks,
+    };
+  } catch {
+    return undefined;
+  }
+}
 
 export function deleteDeck(id: string) {
   if (!canUseStorage()) {
@@ -287,6 +619,8 @@ export function deleteDeck(id: string) {
 
   saveDecks(nextDecks);
   saveFlashcards(nextFlashcards);
+  saveReviewLogs(getReviewLogs().filter((log) => log.deckId !== id));
+  clearLastReviewUndo();
 
   return {
     deck: deckToDelete,
@@ -309,6 +643,9 @@ export function deleteFlashcard(id: string) {
   }
 
   saveFlashcards(nextFlashcards);
+  saveReviewLogs(getReviewLogs().filter((log) => log.cardId !== id));
+  clearLastReviewUndo();
+
   return true;
 }
 
@@ -319,4 +656,6 @@ export function clearFlashcards() {
   }
 
   storage.remove(FLASHCARDS_KEY);
+  storage.remove(REVIEW_LOGS_KEY);
+  clearLastReviewUndo();
 }

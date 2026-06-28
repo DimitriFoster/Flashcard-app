@@ -138,6 +138,14 @@ export default function ReviewIndexScreen() {
             <CrayonFill tone="review" variant="tight" opacity={0.78} />
             <Text style={styles.reviewButtonText}>Browse decks</Text>
           </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/review/stats')}
+            style={({ pressed }) => [styles.statsButton, pressed && styles.pressed]}>
+            <CrayonFill tone="warning" variant="tight" opacity={0.62} />
+            <Text style={styles.statsButtonText}>Stats</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -248,6 +256,24 @@ const styles = StyleSheet.create({
   },
   reviewButtonText: {
     color: COLORS.reviewDeep,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  statsButton: {
+    position: 'relative',
+    overflow: 'hidden',
+    flex: 0.75,
+    minHeight: 44,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.warningSoft,
+    borderColor: COLORS.warningCrayon,
+    borderWidth: 1,
+  },
+  statsButtonText: {
+    color: COLORS.warning,
     fontSize: 15,
     fontWeight: '800',
   },

@@ -23,7 +23,10 @@ import {
 } from 'react-native';
 
 import { CrayonFill } from '@/components/ui/crayon-fill';
+import { parseCardImportText } from '@/lib/import-parser';
 import { MOTION } from '@/constants/design';
+import type { ImportAppBackupResult, ImportCardsOptions, ImportCardsResult } from '@/storage/flashcards';
+import type { ParsedImportCard } from '@/lib/import-parser';
 import type { Deck, Flashcard, NewFlashcard } from '@/types/flashcard';
 import { COLORS, styles } from './create-section.styles';
 
@@ -42,6 +45,19 @@ function previewText(value: string, maxLength = 72) {
   return `${trimmed.slice(0, maxLength - 1)}…`;
 }
 
+function getDeckNameFromFilename(filename: string) {
+  const withoutExtension = filename.replace(/\.[^/.]+$/, '');
+  const cleaned = withoutExtension.replace(/[_-]+/g, ' ').trim();
+
+  return cleaned || 'Imported Deck';
+}
+
+function getImportedDeckName(filename: string, importedCards: ParsedImportCard[]) {
+  const fileDeckName = importedCards.find((card) => card.deckName?.trim())?.deckName?.trim();
+
+  return fileDeckName || getDeckNameFromFilename(filename);
+}
+
 type DeleteDeckResult = {
   deck: Deck;
   deletedCards: number;
@@ -58,6 +74,9 @@ type HomeCreateSectionProps = {
   onCreateCard: (input: NewFlashcard) => Flashcard | undefined;
   onDeleteDeck: (deckId: string) => DeleteDeckResult | undefined;
   onDeleteCard: (cardId: string) => Flashcard | undefined;
+  onImportCards: (cards: ParsedImportCard[], options: ImportCardsOptions) => ImportCardsResult;
+  onExportBackup: () => string;
+  onImportBackup: (rawText: string) => ImportAppBackupResult | undefined;
 };
 
 export function HomeCreateSection({
@@ -69,6 +88,9 @@ export function HomeCreateSection({
   onCreateCard,
   onDeleteDeck,
   onDeleteCard,
+  onImportCards,
+  onExportBackup,
+  onImportBackup,
 }: HomeCreateSectionProps) {
   /**
    * The create area starts collapsed so the home screen feels simple and inviting.
@@ -84,11 +106,15 @@ export function HomeCreateSection({
   const [isDeckPickerRendered, setIsDeckPickerRendered] = useState(false);
   const [showNewDeckForm, setShowNewDeckForm] = useState(false);
   const [isNewDeckFormRendered, setIsNewDeckFormRendered] = useState(false);
+  const [showImportPanel, setShowImportPanel] = useState(false);
+  const [showBackupPanel, setShowBackupPanel] = useState(false);
 
   /** Controlled inputs for creating decks and cards. */
   const [deckName, setDeckName] = useState('');
   const [front, setFront] = useState('');
   const [back, setBack] = useState('');
+  const [backupText, setBackupText] = useState('');
+  const [skipDuplicates, setSkipDuplicates] = useState(true);
   const [statusMessage, setStatusMessage] = useState('');
 
   /**
@@ -285,6 +311,197 @@ export function HomeCreateSection({
     ]);
   }
 
+
+  async function loadFilePickerModules() {
+    try {
+      const [DocumentPicker, FileSystem] = await Promise.all([
+        import('expo-document-picker'),
+        import('expo-file-system/legacy'),
+      ]);
+
+      return {
+        DocumentPicker,
+        FileSystem,
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  function showFilePickerError(error: unknown) {
+    if (error instanceof Error && error.message === 'FILE_PICKER_UNAVAILABLE') {
+      showStatus('File picker needs Expo Go or a rebuilt development build');
+      return;
+    }
+
+    showStatus('Could not read that file');
+  }
+
+  async function pickTextFile() {
+    const modules = await loadFilePickerModules();
+
+    if (!modules) {
+      throw new Error('FILE_PICKER_UNAVAILABLE');
+    }
+
+    const { DocumentPicker, FileSystem } = modules;
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['text/*', 'application/json', 'application/octet-stream', '*/*'],
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+
+    if (result.canceled || !result.assets?.[0]) {
+      return undefined;
+    }
+
+    const asset = result.assets[0];
+    const text = await FileSystem.readAsStringAsync(asset.uri, {
+      encoding: FileSystem.EncodingType.UTF8,
+    });
+
+    return {
+      filename: asset.name,
+      text,
+    };
+  }
+
+  function summarizeImportResult(result: ImportCardsResult, skippedRows: number) {
+    return (
+      `Imported ${result.importedCards} cards` +
+      (result.createdDeck ? ` · created ${result.createdDeck.name}` : '') +
+      (result.skippedDuplicates ? ` · skipped ${result.skippedDuplicates} duplicates` : '') +
+      (skippedRows ? ` · ignored ${skippedRows} incomplete rows` : '')
+    );
+  }
+
+  async function handleImportIntoExistingDeck() {
+    if (!selectedDeck) {
+      showStatus('Choose a deck before importing');
+      return;
+    }
+
+    try {
+      const pickedFile = await pickTextFile();
+
+      if (!pickedFile) {
+        return;
+      }
+
+      const parsed = parseCardImportText(pickedFile.text);
+
+      if (parsed.cards.length === 0) {
+        showStatus(parsed.warnings[0] ?? 'No cards found to import');
+        return;
+      }
+
+      const result = onImportCards(parsed.cards, {
+        mode: 'existingDeck',
+        existingDeckId: selectedDeck.id,
+        skipDuplicates,
+      });
+
+      showStatus(summarizeImportResult(result, parsed.skippedRows));
+    } catch (error) {
+      showFilePickerError(error);
+    }
+  }
+
+  async function handleImportAsNewDeck() {
+    try {
+      const pickedFile = await pickTextFile();
+
+      if (!pickedFile) {
+        return;
+      }
+
+      const parsed = parseCardImportText(pickedFile.text);
+
+      if (parsed.cards.length === 0) {
+        showStatus(parsed.warnings[0] ?? 'No cards found to import');
+        return;
+      }
+
+      const result = onImportCards(parsed.cards, {
+        mode: 'newDeck',
+        newDeckName: getImportedDeckName(pickedFile.filename, parsed.cards),
+        skipDuplicates: false,
+      });
+
+      showStatus(summarizeImportResult(result, parsed.skippedRows));
+    } catch (error) {
+      showFilePickerError(error);
+    }
+  }
+
+  async function handleImportBackupFile() {
+    try {
+      const pickedFile = await pickTextFile();
+
+      if (!pickedFile) {
+        return;
+      }
+
+      Alert.alert(
+        'Replace app data?',
+        'Importing a JSON backup replaces decks, cards, notes, notebooks, and review logs on this device.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Import backup',
+            style: 'destructive',
+            onPress: () => {
+              const result = onImportBackup(pickedFile.text);
+
+              if (!result) {
+                showStatus('Could not read backup JSON');
+                return;
+              }
+
+              showStatus(`Restored ${result.decks.length} decks and ${result.flashcards.length} cards`);
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      showFilePickerError(error);
+    }
+  }
+
+  function handleExportBackup() {
+    setBackupText(onExportBackup());
+    showStatus('Backup JSON ready below');
+  }
+
+  function handleImportBackup() {
+    if (!backupText.trim()) {
+      showStatus('Paste backup JSON first');
+      return;
+    }
+
+    Alert.alert(
+      'Replace app data?',
+      'Importing a JSON backup replaces decks, cards, notes, notebooks, and review logs on this device.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Import backup',
+          style: 'destructive',
+          onPress: () => {
+            const result = onImportBackup(backupText);
+
+            if (!result) {
+              showStatus('Could not read backup JSON');
+              return;
+            }
+
+            showStatus(`Restored ${result.decks.length} decks and ${result.flashcards.length} cards`);
+          },
+        },
+      ]
+    );
+  }
+
   return (
     <>
       {showCreateDetails ? (
@@ -376,6 +593,18 @@ export function HomeCreateSection({
                   ]}>
                   v
                 </Animated.Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setShowImportPanel((value) => !value)}
+                style={({ pressed }) => [
+                  styles.compactToggle,
+                  styles.compactToggleWide,
+                  pressed && styles.pressed,
+                ]}>
+                <Text style={styles.deckPickerToggleText}>Import</Text>
+                <Text style={styles.deckPickerToggleChevron}>v</Text>
               </Pressable>
             </View>
 
@@ -493,6 +722,130 @@ export function HomeCreateSection({
                   </Text>
                 </Pressable>
               </Animated.View>
+            ) : null}
+
+            {showImportPanel ? (
+              <View style={styles.importPanel}>
+                <Text style={styles.importTitle}>Import</Text>
+                <Text style={styles.importHelp}>
+                  Choose a CSV, TSV, or TXT file from your device. Imported cards start as new.
+                  If this button reports that the file picker is unavailable, rebuild the development
+                  app after installing the Expo picker modules.
+                </Text>
+
+                <View style={styles.importOptionRow}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setSkipDuplicates(true)}
+                    style={({ pressed }) => [
+                      styles.importOption,
+                      skipDuplicates && styles.importOptionActive,
+                      pressed && styles.pressed,
+                    ]}>
+                    <Text
+                      style={[
+                        styles.importOptionText,
+                        skipDuplicates && styles.importOptionTextActive,
+                      ]}>
+                      Skip duplicates
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setSkipDuplicates(false)}
+                    style={({ pressed }) => [
+                      styles.importOption,
+                      !skipDuplicates && styles.importOptionActive,
+                      pressed && styles.pressed,
+                    ]}>
+                    <Text
+                      style={[
+                        styles.importOptionText,
+                        !skipDuplicates && styles.importOptionTextActive,
+                      ]}>
+                      Import duplicates
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.importButtonColumn}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: !selectedDeck }}
+                    disabled={!selectedDeck}
+                    onPress={handleImportIntoExistingDeck}
+                    style={({ pressed }) => [
+                      styles.importActionButton,
+                      !selectedDeck && styles.primaryButtonDisabled,
+                      pressed && selectedDeck && styles.pressed,
+                    ]}>
+                    <CrayonFill tone="create" variant="tight" opacity={0.74} />
+                    <Text
+                      style={[
+                        styles.importActionButtonText,
+                        !selectedDeck && styles.primaryButtonTextDisabled,
+                      ]}>
+                      Add file to existing deck
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={handleImportAsNewDeck}
+                    style={({ pressed }) => [styles.importActionButton, pressed && styles.pressed]}>
+                    <CrayonFill tone="create" variant="tight" opacity={0.74} />
+                    <Text style={styles.importActionButtonText}>Create new deck from file</Text>
+                  </Pressable>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setShowBackupPanel((value) => !value)}
+                    style={({ pressed }) => [styles.importBackupButton, pressed && styles.pressed]}>
+                    <Text style={styles.importBackupButtonText}>JSON app backup</Text>
+                  </Pressable>
+                </View>
+
+                {showBackupPanel ? (
+                  <View style={styles.backupPanel}>
+                    <Text style={styles.importTitle}>JSON app backup</Text>
+                    <Text style={styles.importHelp}>
+                      Generate a backup to copy, or choose a JSON backup file to restore this device.
+                    </Text>
+
+                    <View style={styles.importOptionRow}>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={handleExportBackup}
+                        style={({ pressed }) => [styles.importOption, pressed && styles.pressed]}>
+                        <Text style={styles.importOptionText}>Generate backup JSON</Text>
+                      </Pressable>
+
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={handleImportBackupFile}
+                        style={({ pressed }) => [
+                          styles.importOption,
+                          styles.importDangerOption,
+                          pressed && styles.pressed,
+                        ]}>
+                        <Text style={[styles.importOptionText, styles.importDangerText]}>
+                          Restore from JSON file
+                        </Text>
+                      </Pressable>
+                    </View>
+
+                    <TextInput
+                      multiline
+                      placeholder="Backup JSON appears here after export."
+                      value={backupText}
+                      onChangeText={setBackupText}
+                      style={[styles.input, styles.backupTextInput]}
+                      placeholderTextColor={COLORS.muted}
+                    />
+                  </View>
+                ) : null}
+              </View>
             ) : null}
 
             {selectedDeck ? (

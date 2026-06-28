@@ -17,9 +17,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, PanResponder } from 'react-native';
 
 import { DeckReviewSession } from '@/components/review/deck-review-session';
-import { getDecks, getFlashcardsByDeck, reviewFlashcard } from '@/storage/flashcards';
+import { getDecks, getFlashcardsByDeck, reviewFlashcard, undoLastReview, updateFlashcard } from '@/storage/flashcards';
 import type { Deck, Flashcard, ReviewGrade } from '@/types/flashcard';
-import { getDueCards } from '../../lib/review-queue';
+import { getReviewQueue } from '../../lib/review-queue';
 
 function findDeck(deckId: string, decks: Deck[]) {
   return decks.find((deck) => deck.id === deckId);
@@ -42,6 +42,10 @@ export default function DeckReviewScreen() {
   const [cards, setCards] = useState<Flashcard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  const [canUndoReview, setCanUndoReview] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editFront, setEditFront] = useState('');
+  const [editBack, setEditBack] = useState('');
 
   /**
    * Animated.Value stores the horizontal card position during swipe gestures.
@@ -68,8 +72,11 @@ export default function DeckReviewScreen() {
    */
   useEffect(() => {
     setFlipped(false);
+    setIsEditing(false);
+    setEditFront(currentCard?.front ?? '');
+    setEditBack(currentCard?.back ?? '');
     translateX.setValue(0);
-  }, [currentCard?.id, translateX]);
+  }, [currentCard?.id, currentCard?.front, currentCard?.back, translateX]);
 
   /**
    * Due mode is used from the default spaced repetition screen.
@@ -81,7 +88,7 @@ export default function DeckReviewScreen() {
     }
 
     const deckCards = getFlashcardsByDeck(deckId);
-    return isDueMode ? getDueCards(deckCards) : deckCards;
+    return isDueMode ? getReviewQueue(deckCards) : deckCards;
   }, [deckId, isDueMode]);
 
   /**
@@ -97,6 +104,8 @@ export default function DeckReviewScreen() {
       setCards(nextCards);
       setCurrentIndex(0);
       setFlipped(false);
+      setCanUndoReview(false);
+      setIsEditing(false);
       translateX.setValue(0);
     }, [loadCardsForCurrentMode, translateX])
   );
@@ -164,6 +173,48 @@ export default function DeckReviewScreen() {
     [goToNextCard, goToPreviousCard, translateX]
   );
 
+  function handleStartEditing() {
+    if (!currentCard) {
+      return;
+    }
+
+    setEditFront(currentCard.front);
+    setEditBack(currentCard.back);
+    setIsEditing(true);
+  }
+
+  function handleCancelEditing() {
+    setEditFront(currentCard?.front ?? '');
+    setEditBack(currentCard?.back ?? '');
+    setIsEditing(false);
+  }
+
+  function handleSaveEditing() {
+    if (!currentCard) {
+      return;
+    }
+
+    const nextFront = editFront.trim();
+    const nextBack = editBack.trim();
+
+    if (!nextFront || !nextBack) {
+      return;
+    }
+
+    updateFlashcard(currentCard.id, {
+      deckId: currentCard.deckId,
+      front: nextFront,
+      back: nextBack,
+    });
+
+    const nextCards = loadCardsForCurrentMode();
+    const nextIndex = nextCards.findIndex((card) => card.id === currentCard.id);
+
+    setCards(nextCards);
+    setCurrentIndex(nextIndex >= 0 ? nextIndex : 0);
+    setIsEditing(false);
+  }
+
   /**
    * Difficulty buttons are the only actions that update review scheduling.
    * Swiping intentionally does not mutate card data. It only browses the deck.
@@ -174,6 +225,7 @@ export default function DeckReviewScreen() {
     }
 
     reviewFlashcard(currentCard.id, grade);
+    setCanUndoReview(true);
 
     /**
      * Reload from storage so the UI reflects the updated review state.
@@ -192,8 +244,34 @@ export default function DeckReviewScreen() {
         return 0;
       }
 
-      return index >= nextCards.length - 1 ? 0 : index + 1;
+      /**
+       * The reviewed card usually leaves the due queue. Keeping the same index
+       * naturally shows the next card that slid into this position.
+       */
+      return Math.min(index, nextCards.length - 1);
     });
+  }
+
+  function handleUndoReview() {
+    if (!deckId || !canUndoReview) {
+      return;
+    }
+
+    const restoredCard = undoLastReview();
+
+    if (!restoredCard) {
+      setCanUndoReview(false);
+      return;
+    }
+
+    const nextCards = loadCardsForCurrentMode();
+    const restoredIndex = nextCards.findIndex((card) => card.id === restoredCard.id);
+
+    setCards(nextCards);
+    setCurrentIndex(restoredIndex >= 0 ? restoredIndex : 0);
+    setFlipped(false);
+    setCanUndoReview(false);
+    translateX.setValue(0);
   }
 
   /**
@@ -262,7 +340,17 @@ export default function DeckReviewScreen() {
       translateX={translateX}
       panHandlers={panResponder.panHandlers}
       showGradeButtons={isDueMode}
+      showUndoButton={isDueMode && canUndoReview}
+      isEditing={isEditing}
+      editFront={editFront}
+      editBack={editBack}
+      onChangeEditFront={setEditFront}
+      onChangeEditBack={setEditBack}
+      onStartEdit={handleStartEditing}
+      onCancelEdit={handleCancelEditing}
+      onSaveEdit={handleSaveEditing}
       onBack={() => router.push(isDueMode ? '/review' : '/review/browse')}
+      onUndo={handleUndoReview}
       onGrade={handleGrade}
     />
   );

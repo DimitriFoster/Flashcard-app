@@ -1,15 +1,21 @@
 /**
  * CrayonFill.
  *
- * Mobile-safe fallback.
+ * Textured pastel surface for the app's colored panels.
  *
- * The image-based crayon texture caused a blank screen on mobile, so this
- * component intentionally avoids Image assets, SVG, Canvas, and new native
- * dependencies. It keeps the pastel surface treatment stable while the real
- * crayon-fill effect is handed off to Codex with device logs.
+ * This version uses static local PNG assets rather than SVG or repeated pattern
+ * rendering. Each tone gets its own baked texture image so orientation stays
+ * recognizable and mobile rendering remains simple.
  */
 import React from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  Image,
+  StyleSheet,
+  View,
+  type ImageSourcePropType,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 
 import { COLORS } from '@/constants/design';
 
@@ -31,7 +37,27 @@ const TONES: Record<CrayonTone, string> = {
   danger: COLORS.dangerSoft,
 };
 
-export function CrayonFill({ tone = 'create', opacity = 1, style }: CrayonFillProps) {
+const TEXTURES: Partial<Record<CrayonTone, ImageSourcePropType>> = {
+  create: require('../../../assets/images/crayon/create-green-texture.png'),
+  review: require('../../../assets/images/crayon/review-blue-texture.png'),
+  note: require('../../../assets/images/crayon/notes-yellow-texture.png'),
+};
+
+const VARIANT_OPACITY: Record<CrayonVariant, number> = {
+  loose: 0.92,
+  dense: 0.98,
+  tight: 0.86,
+};
+
+export function CrayonFill({
+  tone = 'create',
+  variant = 'loose',
+  opacity = 1,
+  style,
+}: CrayonFillProps) {
+  const source = TEXTURES[tone];
+  const imageOpacity = Math.max(0, Math.min(1, opacity * VARIANT_OPACITY[variant]));
+
   return (
     <View
       pointerEvents="none"
@@ -40,10 +66,31 @@ export function CrayonFill({ tone = 'create', opacity = 1, style }: CrayonFillPr
         style,
         {
           backgroundColor: TONES[tone],
-          opacity,
         },
-      ]}
-    />
+      ]}>
+      {source ? (
+        <Image
+          source={source}
+          resizeMode="cover"
+          style={[
+            styles.fill,
+            {
+              opacity: imageOpacity,
+            },
+          ]}
+        />
+      ) : (
+        <View
+          style={[
+            styles.fill,
+            {
+              backgroundColor: TONES[tone],
+              opacity,
+            },
+          ]}
+        />
+      )}
+    </View>
   );
 }
 

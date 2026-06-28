@@ -7,7 +7,7 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PreviewPanel } from '@/components/review/preview-panel';
@@ -40,21 +40,37 @@ export default function BrowseDecksScreen() {
   const { width } = useWindowDimensions();
   const [decks, setDecks] = useState<Deck[]>([]);
   const [cards, setCards] = useState<Flashcard[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const panelWidth = Math.min(Math.max(width - SPACING.lg * 2, 300), 430);
 
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+
   const deckPreviews = useMemo<DeckPreview[]>(
     () =>
-      decks.map((deck) => {
-        const deckCards = getCardsForDeck(deck.id, cards);
+      decks
+        .map((deck) => {
+          const deckCards = getCardsForDeck(deck.id, cards);
+          const matchingCards = normalizedSearchQuery
+            ? deckCards.filter(
+                (card) =>
+                  card.front.toLowerCase().includes(normalizedSearchQuery) ||
+                  card.back.toLowerCase().includes(normalizedSearchQuery)
+              )
+            : deckCards;
+          const deckMatches = normalizedSearchQuery
+            ? deck.name.toLowerCase().includes(normalizedSearchQuery)
+            : true;
+          const visibleCards = deckMatches ? deckCards : matchingCards;
 
-        return {
-          deck,
-          cards: deckCards,
-          mostRecentCard: getMostRecentCard(deckCards),
-        };
-      }),
-    [cards, decks]
+          return {
+            deck,
+            cards: visibleCards,
+            mostRecentCard: getMostRecentCard(visibleCards),
+          };
+        })
+        .filter((preview) => !normalizedSearchQuery || preview.cards.length > 0 || preview.deck.name.toLowerCase().includes(normalizedSearchQuery)),
+    [cards, decks, normalizedSearchQuery]
   );
 
   useFocusEffect(
@@ -113,6 +129,14 @@ export default function BrowseDecksScreen() {
             <Text style={styles.reviewButtonText}>Review due cards</Text>
           </Pressable>
         </View>
+
+        <TextInput
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search decks, prompts, or answers"
+          placeholderTextColor={COLORS.muted}
+          style={styles.searchInput}
+        />
       </View>
 
       {deckPreviews.length > 0 ? (
@@ -137,9 +161,11 @@ export default function BrowseDecksScreen() {
         </ScrollView>
       ) : (
         <View style={styles.emptyDeckState}>
-          <Text style={styles.emptyDeckTitle}>No decks yet</Text>
+          <Text style={styles.emptyDeckTitle}>{searchQuery ? 'No matches' : 'No decks yet'}</Text>
           <Text style={styles.emptyDeckText}>
-            Create a deck first, then it will appear here as a browse block.
+            {searchQuery
+              ? 'Try searching for a different deck, prompt, or answer.'
+              : 'Create a deck first, then it will appear here as a browse block.'}
           </Text>
         </View>
       )}
@@ -219,6 +245,17 @@ const styles = StyleSheet.create({
     color: COLORS.reviewDeep,
     fontSize: 15,
     fontWeight: '800',
+  },
+  searchInput: {
+    color: COLORS.ink,
+    backgroundColor: COLORS.panel,
+    borderColor: COLORS.reviewCrayon,
+    borderWidth: 1,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    fontWeight: '700',
   },
   deckCarousel: {
     gap: SPACING.md,
