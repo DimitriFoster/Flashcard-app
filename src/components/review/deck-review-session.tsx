@@ -34,6 +34,7 @@ type DeckReviewSessionProps = {
   flipped: boolean;
   translateX: Animated.Value;
   panHandlers: PanResponderInstance['panHandlers'];
+  showGradeButtons?: boolean;
   onBack: () => void;
   onGrade: (grade: ReviewGrade) => void;
 };
@@ -93,6 +94,7 @@ export function DeckReviewSession({
   flipped,
   translateX,
   panHandlers,
+  showGradeButtons = true,
   onBack,
   onGrade,
 }: DeckReviewSessionProps) {
@@ -176,7 +178,7 @@ export function DeckReviewSession({
         )}
       </View>
 
-      {currentCard ? (
+      {currentCard && showGradeButtons ? (
         <View style={[styles.gradeRow, isLandscape && styles.gradeRowLandscape]}>
           {gradeButtons.map((button) => (
             <Pressable

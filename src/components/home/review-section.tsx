@@ -17,21 +17,16 @@ type HomeReviewSectionProps = {
 
 export function HomeReviewSection({ onPressReview }: HomeReviewSectionProps) {
   return (
-    <View style={[styles.section, styles.reviewSection]}>
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPressReview}
+      style={({ pressed }) => [styles.section, styles.reviewSection, pressed && styles.pressed]}>
       <CrayonFill tone="review" variant="loose" opacity={0.44} />
       <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionLabel, styles.reviewSectionLabel]}>review</Text>
+        <Text style={styles.reviewSectionLabel}>review</Text>
         <Text style={styles.sectionKicker}>Jump into spaced repetition when you’re ready.</Text>
       </View>
-
-      <Pressable
-        accessibilityRole="button"
-        onPress={onPressReview}
-        style={({ pressed }) => [styles.reviewButton, pressed && styles.pressed]}>
-        <CrayonFill tone="review" variant="tight" opacity={0.82} />
-        <Text style={styles.reviewButtonText}>Review</Text>
-      </Pressable>
-    </View>
+    </Pressable>
   );
 }
 
@@ -52,39 +47,26 @@ const styles = StyleSheet.create({
     borderColor: COLORS.reviewCrayon,
     borderTopColor: COLORS.review,
     borderTopWidth: 4,
+    minHeight: 132,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   reviewSectionLabel: {
     color: COLORS.reviewDeep,
+    fontSize: 28,
+    fontWeight: '800',
+    textAlign: 'center',
   },
   sectionHeader: {
     position: 'relative',
     gap: 4,
-  },
-  sectionLabel: {
-    color: COLORS.reviewDeep,
-    fontSize: 28,
-    fontWeight: '800',
+    alignItems: 'center',
   },
   sectionKicker: {
-    color: COLORS.muted,
+    color: COLORS.reviewDeep,
     fontSize: 14,
     fontWeight: '600',
-  },
-  reviewButton: {
-    position: 'relative',
-    overflow: 'hidden',
-    backgroundColor: COLORS.reviewSoft,
-    borderColor: COLORS.reviewCrayon,
-    borderWidth: 1,
-    borderRadius: RADIUS.md,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  reviewButtonText: {
-    color: COLORS.reviewDeep,
-    fontSize: 16,
-    fontWeight: '800',
+    textAlign: 'center',
   },
   pressed: {
     opacity: 0.9,

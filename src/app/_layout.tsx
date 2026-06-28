@@ -53,6 +53,12 @@ export default function RootLayout() {
           {/* The Review index has its own visual header, so the default header is hidden. */}
           <Stack.Screen name="review/index" options={{ title: 'Review', headerShown: false }} />
 
+          {/* Browse Decks mirrors the Review carousel without due-card filtering. */}
+          <Stack.Screen name="review/browse" options={{ title: 'Browse Decks', headerShown: false }} />
+
+          {/* Notes has its own notebook-style header and save controls. */}
+          <Stack.Screen name="notes/index" options={{ title: 'Notes', headerShown: false }} />
+
           {/*
             The deck review session is intentionally full-screen. It has its own
             custom Back button inside the screen UI.

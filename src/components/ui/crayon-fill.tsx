@@ -13,7 +13,7 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { COLORS } from '@/constants/design';
 
-export type CrayonTone = 'create' | 'review' | 'warning' | 'danger';
+export type CrayonTone = 'create' | 'review' | 'note' | 'warning' | 'danger';
 export type CrayonVariant = 'loose' | 'dense' | 'tight';
 
 type CrayonFillProps = {
@@ -26,6 +26,7 @@ type CrayonFillProps = {
 const TONES: Record<CrayonTone, string> = {
   create: COLORS.createPaper,
   review: COLORS.reviewPaper,
+  note: COLORS.notePaper,
   warning: COLORS.warningSoft,
   danger: COLORS.dangerSoft,
 };

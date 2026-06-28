@@ -17,6 +17,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HomeCreateSection } from '@/components/home/create-section';
+import { HomeNotesSection } from '@/components/home/notes-section';
 import { HomeReviewSection } from '@/components/home/review-section';
 import { COLORS, SPACING } from '@/constants/design';
 import {
@@ -162,6 +163,9 @@ export default function HomeScreen() {
 
       {/* Navigation is handled here so the child component stays presentation-focused. */}
       <HomeReviewSection onPressReview={() => router.push('/review')} />
+
+      {/* Notes opens a focused notebook route for fast freeform capture. */}
+      <HomeNotesSection onPressNotes={() => router.push('/notes')} />
     </ScrollView>
   );
 }

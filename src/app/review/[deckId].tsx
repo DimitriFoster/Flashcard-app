@@ -19,6 +19,7 @@ import { Animated, PanResponder } from 'react-native';
 import { DeckReviewSession } from '@/components/review/deck-review-session';
 import { getDecks, getFlashcardsByDeck, reviewFlashcard } from '@/storage/flashcards';
 import type { Deck, Flashcard, ReviewGrade } from '@/types/flashcard';
+import { getDueCards } from '../../lib/review-queue';
 
 function findDeck(deckId: string, decks: Deck[]) {
   return decks.find((deck) => deck.id === deckId);
@@ -32,8 +33,10 @@ export default function DeckReviewScreen() {
    * The array case can happen when a query param appears more than once.
    * Normalizing it up front keeps the rest of the screen simpler.
    */
-  const params = useLocalSearchParams<{ deckId?: string | string[] }>();
+  const params = useLocalSearchParams<{ deckId?: string | string[]; mode?: string | string[] }>();
   const deckId = Array.isArray(params.deckId) ? params.deckId[0] : params.deckId;
+  const mode = Array.isArray(params.mode) ? params.mode[0] : params.mode;
+  const isDueMode = mode === 'due';
 
   const [decks, setDecks] = useState<Deck[]>([]);
   const [cards, setCards] = useState<Flashcard[]>([]);
@@ -69,20 +72,33 @@ export default function DeckReviewScreen() {
   }, [currentCard?.id, translateX]);
 
   /**
+   * Due mode is used from the default spaced repetition screen.
+   * Browse mode uses the full deck so the user can freely inspect cards.
+   */
+  const loadCardsForCurrentMode = useCallback(() => {
+    if (!deckId) {
+      return [];
+    }
+
+    const deckCards = getFlashcardsByDeck(deckId);
+    return isDueMode ? getDueCards(deckCards) : deckCards;
+  }, [deckId, isDueMode]);
+
+  /**
    * Refresh local state whenever this screen becomes active.
    * This allows Home/Review changes to show up without restarting the app.
    */
   useFocusEffect(
     useCallback(() => {
       const nextDecks = getDecks();
-      const nextCards = deckId ? getFlashcardsByDeck(deckId) : [];
+      const nextCards = loadCardsForCurrentMode();
 
       setDecks(nextDecks);
       setCards(nextCards);
       setCurrentIndex(0);
       setFlipped(false);
       translateX.setValue(0);
-    }, [deckId, translateX])
+    }, [loadCardsForCurrentMode, translateX])
   );
 
   /**
@@ -163,7 +179,7 @@ export default function DeckReviewScreen() {
      * Reload from storage so the UI reflects the updated review state.
      * This also keeps this screen consistent with the Review preview page.
      */
-    const nextCards = getFlashcardsByDeck(deckId);
+    const nextCards = loadCardsForCurrentMode();
     setCards(nextCards);
 
     /**
@@ -245,7 +261,8 @@ export default function DeckReviewScreen() {
       flipped={flipped}
       translateX={translateX}
       panHandlers={panResponder.panHandlers}
-      onBack={() => router.push('/review')}
+      showGradeButtons={isDueMode}
+      onBack={() => router.push(isDueMode ? '/review' : '/review/browse')}
       onGrade={handleGrade}
     />
   );

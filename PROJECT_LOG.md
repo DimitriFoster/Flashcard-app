@@ -848,3 +848,114 @@ If accepted, the project will have a stronger design foundation through:
 * Better tactile feedback
 * Clearer card creation feedback
 * A more physical review session
+
+---
+
+# 2026-06-27
+
+## Notes Section and Lined Notebook Page
+
+### Summary
+
+Added a third Home screen section labeled `notes` under the Review section.
+
+The new section opens a dedicated Notes route for quick freeform writing. The Notes screen is styled like a clean A5 lined notebook page with a soft yellow app section color, faint horizontal ruling, and a left-side saved-notes panel.
+
+### Changes
+
+- Added a soft pastel yellow Notes section on the Home screen.
+- Added a new `/notes` route.
+- Added local MMKV-backed note storage.
+- Added a left panel showing previously saved notes.
+- Added a blank-note writing state when the Notes page opens.
+- Added a `New` button for starting another note.
+- Added note selection so saved notes can be opened and edited immediately.
+- Added a yellow `Save & close` button in the top right.
+- Added a `Back home` button with an unsaved-changes warning.
+
+### Files Touched
+
+```txt
+src/app/index.tsx
+src/app/_layout.tsx
+src/app/notes/index.tsx
+src/components/home/notes-section.tsx
+src/components/ui/crayon-fill.tsx
+src/constants/design.ts
+src/storage/notes.ts
+src/types/note.ts
+PROJECT_LOG.md
+```
+
+### Notes
+
+The notebook page intentionally avoids new native dependencies. The lined-paper look is created with plain React Native views behind a multiline `TextInput`.
+
+This keeps the feature mobile-safe while still giving the Notes route a distinct paper-notebook feeling.
+
+### Outcome
+
+The app now has three main Home actions:
+
+```txt
+Create  → make decks and cards
+Review  → study existing decks
+Notes   → capture longer freeform thoughts
+```
+
+This gives the app a stronger capture-to-study workflow. Loose thoughts can now live in Notes before being turned into flashcards later.
+
+
+---
+
+# 2026-06-27
+
+## Notebook Drag Fix Reapplied to Current Build
+
+### Summary
+
+The latest notebook drag/title fixes were reapplied on top of the current Codex-edited build.
+
+### Changes
+
+- Notebook title/header controls now flex so long notebook names have more room.
+- Notebook action buttons resize slightly based on notebook title length.
+- Drag hover detection checks both X and Y coordinates.
+- Notes can highlight as drop targets.
+- Dragged notes show a floating preview so they remain visible above the sidebar and yellow editor border.
+- Dragging a notebook note onto a loose note creates a fresh notebook for those two notes instead of pulling the loose note into the selected notebook.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+src/storage/notes.ts
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-27
+
+## Notebook Hover and Drag Preview Fix
+
+### Summary
+
+Fixed notebook/note hover highlighting, constrained the notebook title input more aggressively, and removed the double-image effect while dragging notes.
+
+### Changes
+
+- Hover detection now uses a forgiving hit area around notes and notebooks.
+- Notes now have their own yellow drop-target highlight style.
+- Dragging now uses the floating preview as the moving object.
+- The original dragged card fades in place instead of moving with the preview.
+- Notebook title input now uses a calculated width and calculated font size based on title length.
+- Notebook title input is bounded with overflow protection so it should not leak out of the notebook panel header.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```

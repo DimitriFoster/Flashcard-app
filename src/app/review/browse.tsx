@@ -1,11 +1,8 @@
 /**
- * Spaced repetition review screen.
+ * Browse decks review screen.
  *
- * This is the default Review page from Home. It focuses on cards that are due:
- * - new cards with no dueAt yet
- * - reviewed cards whose dueAt is now or in the past
- *
- * Use Browse Decks when the goal is to open any deck regardless of due status.
+ * This page uses the same deck-card format as the spaced repetition screen,
+ * but it shows all cards in each deck and removes the spaced repetition note.
  */
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
@@ -18,7 +15,6 @@ import { CrayonFill } from '@/components/ui/crayon-fill';
 import { COLORS, RADIUS, SPACING } from '@/constants/design';
 import { getDecks, getFlashcards } from '@/storage/flashcards';
 import type { Deck, Flashcard } from '@/types/flashcard';
-import { getDueCards } from '../../lib/review-queue';
 
 /**
  * Returns the newest card by createdAt.
@@ -35,11 +31,10 @@ function getCardsForDeck(deckId: string, cards: Flashcard[]) {
 type DeckPreview = {
   deck: Deck;
   cards: Flashcard[];
-  dueCards: Flashcard[];
-  mostRecentDueCard?: Flashcard;
+  mostRecentCard?: Flashcard;
 };
 
-export default function ReviewIndexScreen() {
+export default function BrowseDecksScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -52,22 +47,16 @@ export default function ReviewIndexScreen() {
     () =>
       decks.map((deck) => {
         const deckCards = getCardsForDeck(deck.id, cards);
-        const dueCards = getDueCards(deckCards);
 
         return {
           deck,
           cards: deckCards,
-          dueCards,
-          mostRecentDueCard: getMostRecentCard(dueCards),
+          mostRecentCard: getMostRecentCard(deckCards),
         };
       }),
     [cards, decks]
   );
 
-  /**
-   * useFocusEffect runs each time this screen becomes active.
-   * That matters because due counts change after grading cards.
-   */
   useFocusEffect(
     useCallback(() => {
       setDecks(getDecks());
@@ -76,31 +65,18 @@ export default function ReviewIndexScreen() {
   );
 
   /**
-   * Open a focused review session in due-card mode.
-   * The deck route uses the mode param to filter out cards scheduled for later.
+   * Browse mode opens the full deck. It does not filter out cards scheduled
+   * for later, which makes it useful for checking/editing the shape of a deck.
    */
-  function openDueDeck(deckId: string | undefined) {
+  function openDeck(deckId: string | undefined) {
     if (!deckId) {
       return;
     }
 
     router.push({
       pathname: '/review/[deckId]',
-      params: { deckId, mode: 'due' },
+      params: { deckId },
     });
-  }
-
-  function renderRetentionNote() {
-    return (
-      <View style={styles.retentionNote}>
-        <CrayonFill tone="warning" variant="dense" opacity={0.45} />
-        <Text style={styles.noteTitle}>How to get the most from spaced repetition</Text>
-        <Text style={styles.noteText}>
-          Review due cards consistently, answer before revealing, and grade honestly. Missed cards
-          return quickly; easy cards wait longer, focusing effort right before forgetting.
-        </Text>
-      </View>
-    );
   }
 
   return (
@@ -114,13 +90,11 @@ export default function ReviewIndexScreen() {
         },
       ]}>
       <View style={styles.header}>
-        <Text style={styles.eyebrow}>Spaced repetition</Text>
-        <Text style={styles.title}>Review due cards.</Text>
+        <Text style={styles.eyebrow}>Browse decks</Text>
+        <Text style={styles.title}>Open any deck.</Text>
         <Text style={styles.subtitle}>
-          These deck blocks focus on cards that are new or scheduled for review today.
+          Browse mode shows every deck, even when cards are not due yet.
         </Text>
-
-        {renderRetentionNote()}
 
         <View style={styles.headerActionRow}>
           <Pressable
@@ -133,10 +107,10 @@ export default function ReviewIndexScreen() {
 
           <Pressable
             accessibilityRole="button"
-            onPress={() => router.push('/review/browse')}
+            onPress={() => router.push('/review')}
             style={({ pressed }) => [styles.reviewButton, pressed && styles.pressed]}>
             <CrayonFill tone="review" variant="tight" opacity={0.78} />
-            <Text style={styles.reviewButtonText}>Browse decks</Text>
+            <Text style={styles.reviewButtonText}>Review due cards</Text>
           </Pressable>
         </View>
       </View>
@@ -146,31 +120,26 @@ export default function ReviewIndexScreen() {
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.deckCarousel}>
-          {deckPreviews.map((item) => {
-            const dueCount = item.dueCards.length;
-            const totalCount = item.cards.length;
-
-            return (
-              <PreviewPanel
-                key={item.deck.id}
-                title={item.deck.name}
-                helper={`${dueCount} due now · ${totalCount} ${totalCount === 1 ? 'card' : 'cards'} total.`}
-                card={item.mostRecentDueCard}
-                deck={item.deck}
-                emptyText="Nothing due in this deck right now. Use Browse Decks if you still want to open it."
-                deckId={dueCount > 0 ? item.deck.id : undefined}
-                buttonLabel={dueCount > 0 ? 'Review this deck' : 'No due cards'}
-                onOpenDeck={() => openDueDeck(dueCount > 0 ? item.deck.id : undefined)}
-                style={{ width: panelWidth }}
-              />
-            );
-          })}
+          {deckPreviews.map((item) => (
+            <PreviewPanel
+              key={item.deck.id}
+              title={item.deck.name}
+              helper={`${item.cards.length} ${item.cards.length === 1 ? 'card' : 'cards'} in this deck.`}
+              card={item.mostRecentCard}
+              deck={item.deck}
+              emptyText="Add cards to this deck from the Create section, then come back here to review."
+              deckId={item.cards.length > 0 ? item.deck.id : undefined}
+              buttonLabel={item.cards.length > 0 ? 'Review this deck' : 'No cards yet'}
+              onOpenDeck={() => openDeck(item.cards.length > 0 ? item.deck.id : undefined)}
+              style={{ width: panelWidth }}
+            />
+          ))}
         </ScrollView>
       ) : (
         <View style={styles.emptyDeckState}>
           <Text style={styles.emptyDeckTitle}>No decks yet</Text>
           <Text style={styles.emptyDeckText}>
-            Create a deck first, then it will appear here as a spaced repetition block.
+            Create a deck first, then it will appear here as a browse block.
           </Text>
         </View>
       )}
@@ -188,7 +157,7 @@ const styles = StyleSheet.create({
     gap: SPACING.md,
   },
   header: {
-    gap: 10,
+    gap: 8,
     maxWidth: 820,
   },
   eyebrow: {
@@ -255,26 +224,6 @@ const styles = StyleSheet.create({
     gap: SPACING.md,
     paddingRight: SPACING.lg,
     paddingVertical: 4,
-  },
-  retentionNote: {
-    position: 'relative',
-    overflow: 'hidden',
-    backgroundColor: COLORS.warningSoft,
-    borderColor: COLORS.warningCrayon,
-    borderWidth: 1,
-    borderRadius: RADIUS.md,
-    padding: 12,
-    gap: 5,
-  },
-  noteTitle: {
-    color: COLORS.warning,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  noteText: {
-    color: COLORS.ink,
-    fontSize: 13,
-    lineHeight: 18,
   },
   emptyDeckState: {
     backgroundColor: COLORS.panel,

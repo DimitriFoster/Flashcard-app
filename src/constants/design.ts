@@ -20,6 +20,13 @@ export const COLORS = {
   reviewCrayon: '#94AFF3',
   reviewDeep: '#405FB8',
 
+  note: '#E7B94F',
+  noteSoft: '#FFF5CF',
+  notePaper: '#FFF1B8',
+  noteCrayon: '#F0D172',
+  noteDeep: '#8A6317',
+  noteLine: '#E9DCA8',
+
   warning: '#B87524',
   warningSoft: '#FFF1D8',
   warningCrayon: '#F2C779',
