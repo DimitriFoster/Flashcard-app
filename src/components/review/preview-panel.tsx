@@ -67,12 +67,11 @@ export function PreviewPanel({
       <CrayonFill tone="review" variant="loose" opacity={0.38} />
       <View style={styles.previewHeader}>
         <View style={styles.previewTitleGroup}>
-          <Text style={styles.previewTitle}>{title}</Text>
           <Text style={styles.previewHelper}>{helper}</Text>
         </View>
         {deck && (
           <View style={styles.deckBadge}>
-            <CrayonFill tone="review" variant="tight" opacity={0.75} />
+            <CrayonFill tone="review" variant="tight" opacity={0.78} />
             <Text style={styles.deckBadgeText}>{deck.name}</Text>
           </View>
         )}
@@ -136,32 +135,32 @@ const styles = StyleSheet.create({
   },
   previewTitleGroup: {
     flex: 1,
+    justifyContent: 'center',
     gap: 3,
-  },
-  previewTitle: {
-    color: COLORS.ink,
-    fontSize: 20,
-    fontWeight: '800',
   },
   previewHelper: {
     color: COLORS.muted,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '800',
   },
   deckBadge: {
     position: 'relative',
     overflow: 'hidden',
+    maxWidth: '58%',
     backgroundColor: COLORS.reviewSoft,
     borderColor: COLORS.reviewCrayon,
     borderWidth: 1,
     borderRadius: RADIUS.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
   },
   deckBadgeText: {
     color: COLORS.reviewDeep,
-    fontSize: 12,
-    fontWeight: '800',
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '900',
+    textAlign: 'center',
   },
   previewCard: {
     flex: 1,

@@ -5,8 +5,8 @@
  * but it shows all cards in each deck and removes the spaced repetition note.
  */
 import { useFocusEffect } from '@react-navigation/native';
-import { useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -32,19 +32,25 @@ type DeckPreview = {
   deck: Deck;
   cards: Flashcard[];
   mostRecentCard?: Flashcard;
+  cardSearchQuery?: string;
 };
 
 export default function BrowseDecksScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ q?: string | string[] }>();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+
+  const routeSearchQuery = Array.isArray(params.q) ? params.q[0] : params.q;
+
   const [decks, setDecks] = useState<Deck[]>([]);
   const [cards, setCards] = useState<Flashcard[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(routeSearchQuery ?? '');
 
   const panelWidth = Math.min(Math.max(width - SPACING.lg * 2, 300), 430);
 
-  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const trimmedSearchQuery = searchQuery.trim();
+  const normalizedSearchQuery = trimmedSearchQuery.toLowerCase();
 
   const deckPreviews = useMemo<DeckPreview[]>(
     () =>
@@ -61,16 +67,30 @@ export default function BrowseDecksScreen() {
           const deckMatches = normalizedSearchQuery
             ? deck.name.toLowerCase().includes(normalizedSearchQuery)
             : true;
-          const visibleCards = deckMatches ? deckCards : matchingCards;
+
+          /**
+           * Search has two useful meanings:
+           * - If card text matches, preview and open only those matching cards.
+           * - If only the deck name matches, keep the whole deck available.
+           */
+          const cardSearchQuery =
+            normalizedSearchQuery && matchingCards.length > 0 ? trimmedSearchQuery : undefined;
+          const visibleCards = cardSearchQuery ? matchingCards : deckMatches ? deckCards : matchingCards;
 
           return {
             deck,
             cards: visibleCards,
             mostRecentCard: getMostRecentCard(visibleCards),
+            cardSearchQuery,
           };
         })
-        .filter((preview) => !normalizedSearchQuery || preview.cards.length > 0 || preview.deck.name.toLowerCase().includes(normalizedSearchQuery)),
-    [cards, decks, normalizedSearchQuery]
+        .filter(
+          (preview) =>
+            !normalizedSearchQuery ||
+            preview.cards.length > 0 ||
+            preview.deck.name.toLowerCase().includes(normalizedSearchQuery)
+        ),
+    [cards, decks, normalizedSearchQuery, trimmedSearchQuery]
   );
 
   useFocusEffect(
@@ -80,24 +100,34 @@ export default function BrowseDecksScreen() {
     }, [])
   );
 
+  useEffect(() => {
+    if (routeSearchQuery !== undefined) {
+      setSearchQuery(routeSearchQuery);
+    }
+  }, [routeSearchQuery]);
+
   /**
    * Browse mode opens the full deck. It does not filter out cards scheduled
    * for later, which makes it useful for checking/editing the shape of a deck.
    */
-  function openDeck(deckId: string | undefined) {
+  function openDeck(deckId: string | undefined, cardSearchQuery?: string) {
     if (!deckId) {
       return;
     }
 
     router.push({
       pathname: '/review/[deckId]',
-      params: { deckId },
+      params: cardSearchQuery
+        ? { deckId, cardSearch: cardSearchQuery }
+        : { deckId },
     });
   }
 
   return (
     <ScrollView
       style={styles.screen}
+      directionalLockEnabled
+      decelerationRate="fast"
       contentContainerStyle={[
         styles.content,
         {
@@ -143,21 +173,42 @@ export default function BrowseDecksScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          decelerationRate="fast"
+          disableIntervalMomentum
+          snapToAlignment="start"
+          snapToInterval={panelWidth + SPACING.md}
           contentContainerStyle={styles.deckCarousel}>
-          {deckPreviews.map((item) => (
-            <PreviewPanel
-              key={item.deck.id}
-              title={item.deck.name}
-              helper={`${item.cards.length} ${item.cards.length === 1 ? 'card' : 'cards'} in this deck.`}
-              card={item.mostRecentCard}
-              deck={item.deck}
-              emptyText="Add cards to this deck from the Create section, then come back here to review."
-              deckId={item.cards.length > 0 ? item.deck.id : undefined}
-              buttonLabel={item.cards.length > 0 ? 'Review this deck' : 'No cards yet'}
-              onOpenDeck={() => openDeck(item.cards.length > 0 ? item.deck.id : undefined)}
-              style={{ width: panelWidth }}
-            />
-          ))}
+          {deckPreviews.map((item) => {
+            const isCardSearch = Boolean(item.cardSearchQuery);
+            const cardWord = item.cards.length === 1 ? 'card' : 'cards';
+
+            return (
+              <PreviewPanel
+                key={item.deck.id}
+                title={item.deck.name}
+                helper={
+                  isCardSearch
+                    ? `${item.cards.length} matching ${cardWord} in this deck.`
+                    : `${item.cards.length} ${cardWord} in this deck.`
+                }
+                card={item.mostRecentCard}
+                deck={item.deck}
+                emptyText="Add cards to this deck from the Create section, then come back here to review."
+                deckId={item.cards.length > 0 ? item.deck.id : undefined}
+                buttonLabel={
+                  item.cards.length > 0
+                    ? isCardSearch
+                      ? 'Open matching cards'
+                      : 'Review this deck'
+                    : 'No cards yet'
+                }
+                onOpenDeck={() =>
+                  openDeck(item.cards.length > 0 ? item.deck.id : undefined, item.cardSearchQuery)
+                }
+                style={{ width: panelWidth }}
+              />
+            );
+          })}
         </ScrollView>
       ) : (
         <View style={styles.emptyDeckState}>

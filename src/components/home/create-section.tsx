@@ -108,6 +108,7 @@ export function HomeCreateSection({
   const [isNewDeckFormRendered, setIsNewDeckFormRendered] = useState(false);
   const [showImportPanel, setShowImportPanel] = useState(false);
   const [showBackupPanel, setShowBackupPanel] = useState(false);
+  const [showManagePanel, setShowManagePanel] = useState(false);
 
   /** Controlled inputs for creating decks and cards. */
   const [deckName, setDeckName] = useState('');
@@ -125,10 +126,12 @@ export function HomeCreateSection({
   const newDeckProgress = useRef(new Animated.Value(0)).current;
   const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const selectedDeckCards = selectedDeck
-    ? cards.filter((card) => card.deckId === selectedDeck.id)
-    : [];
-  const addCardButtonLabel = selectedDeck ? `Add to ${selectedDeck.name}` : 'Choose a deck first';
+  const selectedDeckFromDecks = selectedDeck ? decks.find((deck) => deck.id === selectedDeck.id) : undefined;
+  const activeDeck = selectedDeckFromDecks ?? selectedDeck;
+  const selectedDeckCards =
+    activeDeck && showManagePanel ? cards.filter((card) => card.deckId === activeDeck.id) : [];
+  const hasPromptText = front.trim().length > 0;
+  const addCardButtonLabel = activeDeck ? `Add to ${activeDeck.name}` : 'Choose a deck first';
 
   useEffect(() => {
     return () => {
@@ -150,10 +153,25 @@ export function HomeCreateSection({
     }, 1800);
   }
 
+  function closeDeckPickerPanel() {
+    setShowDeckPicker(false);
+    setIsDeckPickerRendered(false);
+    deckPickerProgress.setValue(0);
+  }
+
+  function closeNewDeckPanel() {
+    setShowNewDeckForm(false);
+    setIsNewDeckFormRendered(false);
+    newDeckProgress.setValue(0);
+  }
+
   function toggleDeckPicker() {
     const nextValue = showDeckPicker ? 0 : 1;
 
     if (!showDeckPicker) {
+      closeNewDeckPanel();
+      setShowImportPanel(false);
+      setShowManagePanel(false);
       setIsDeckPickerRendered(true);
     }
 
@@ -179,6 +197,9 @@ export function HomeCreateSection({
     const nextValue = showNewDeckForm ? 0 : 1;
 
     if (!showNewDeckForm) {
+      closeDeckPickerPanel();
+      setShowImportPanel(false);
+      setShowManagePanel(false);
       setIsNewDeckFormRendered(true);
     }
 
@@ -197,7 +218,39 @@ export function HomeCreateSection({
   }
 
   function toggleCreateSection() {
+    if (showCreateDetails) {
+      setShowManagePanel(false);
+    }
+
     setShowCreateDetails((current) => !current);
+  }
+
+  function selectDeckFromPicker(deckId: string) {
+    onSelectDeckId(deckId);
+
+    /**
+     * Keep deck selection light. The card-management window can be reopened
+     * after a deck is selected, instead of rendering every card during picking.
+     */
+    setShowManagePanel(false);
+  }
+
+  function toggleManagePanel() {
+    if (!activeDeck) {
+      return;
+    }
+
+    setShowManagePanel((current) => !current);
+  }
+
+  function toggleImportPanel() {
+    if (!showImportPanel) {
+      closeDeckPickerPanel();
+      closeNewDeckPanel();
+      setShowManagePanel(false);
+    }
+
+    setShowImportPanel((value) => !value);
   }
 
   function createDeck() {
@@ -213,6 +266,7 @@ export function HomeCreateSection({
     if (deck) {
       /** New decks become the active destination for card creation. */
       onSelectDeckId(deck.id);
+      setShowManagePanel(false);
       setDeckName('');
       showStatus(`Deck created: ${deck.name} ✓`);
 
@@ -230,6 +284,8 @@ export function HomeCreateSection({
       });
 
       /** Show the deck picker so the user can see the deck they just created. */
+      setShowImportPanel(false);
+      setShowManagePanel(false);
       setShowDeckPicker(true);
       setIsDeckPickerRendered(true);
       Animated.timing(deckPickerProgress, {
@@ -246,12 +302,12 @@ export function HomeCreateSection({
     const nextBack = back.trim();
 
     /** A card needs a target deck, a prompt, and an answer. */
-    if (!selectedDeck || !nextFront || !nextBack) {
+    if (!activeDeck || !nextFront || !nextBack) {
       return;
     }
 
     const card = onCreateCard({
-      deckId: selectedDeck.id,
+      deckId: activeDeck.id,
       front: nextFront,
       back: nextBack,
     });
@@ -260,12 +316,12 @@ export function HomeCreateSection({
       /** Clear the card form so the user can quickly enter the next card. */
       setFront('');
       setBack('');
-      showStatus(`Added to ${selectedDeck.name} ✓`);
+      showStatus(`Added to ${activeDeck.name} ✓`);
     }
   }
 
   function deleteSelectedDeck() {
-    if (!selectedDeck) {
+    if (!activeDeck) {
       return;
     }
 
@@ -274,18 +330,19 @@ export function HomeCreateSection({
 
     Alert.alert(
       'Delete deck?',
-      `Delete "${selectedDeck.name}" and ${cardCopy}? This cannot be undone.`,
+      `Delete "${activeDeck.name}" and ${cardCopy}? This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete deck',
           style: 'destructive',
           onPress: () => {
-            const result = onDeleteDeck(selectedDeck.id);
+            const result = onDeleteDeck(activeDeck.id);
 
             if (result) {
               setFront('');
               setBack('');
+              setShowManagePanel(false);
               showStatus(`Deleted ${result.deck.name} and ${result.deletedCards} cards`);
             }
           },
@@ -519,7 +576,7 @@ export function HomeCreateSection({
             <View style={styles.destinationRow}>
               <CrayonFill tone="create" variant="tight" opacity={0.65} />
               <Text style={styles.destinationLabel}>Deck</Text>
-              <Text style={styles.destinationValue}>{selectedDeck?.name ?? 'No deck selected'}</Text>
+              <Text style={styles.destinationValue}>{activeDeck?.name ?? 'No deck selected'}</Text>
             </View>
 
             <TextInput
@@ -540,6 +597,35 @@ export function HomeCreateSection({
               placeholderTextColor={COLORS.muted}
             />
 
+            <View style={styles.addCardActionRow}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ disabled: !selectedDeck }}
+                disabled={!activeDeck}
+                onPress={createCard}
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  styles.primaryButtonFloating,
+                  hasPromptText && styles.primaryButtonPromptActive,
+                  !activeDeck && !hasPromptText && styles.primaryButtonDisabled,
+                  pressed && activeDeck && styles.pressed,
+                ]}>
+                {hasPromptText ? <CrayonFill tone="review" variant="tight" opacity={0.78} /> : null}
+                <Text
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.78}
+                  style={[
+                    styles.primaryButtonText,
+                    hasPromptText && styles.primaryButtonTextPromptActive,
+                    !activeDeck && !hasPromptText && styles.primaryButtonTextDisabled,
+                  ]}>
+                  {addCardButtonLabel}
+                </Text>
+              </Pressable>
+            </View>
+
             <View style={styles.dropdownToggleRow}>
               <Pressable
                 accessibilityRole="button"
@@ -549,7 +635,9 @@ export function HomeCreateSection({
                   styles.compactToggleNarrow,
                   pressed && styles.pressed,
                 ]}>
-                <Text style={styles.deckPickerToggleText}>New deck</Text>
+                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82} style={styles.deckPickerToggleText}>
+                  New deck
+                </Text>
                 <Animated.Text
                   style={[
                     styles.deckPickerToggleChevron,
@@ -576,7 +664,9 @@ export function HomeCreateSection({
                   styles.compactToggleWide,
                   pressed && styles.pressed,
                 ]}>
-                <Text style={styles.deckPickerToggleText}>Pick deck</Text>
+                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82} style={styles.deckPickerToggleText}>
+                  Pick deck
+                </Text>
                 <Animated.Text
                   style={[
                     styles.deckPickerToggleChevron,
@@ -597,13 +687,15 @@ export function HomeCreateSection({
 
               <Pressable
                 accessibilityRole="button"
-                onPress={() => setShowImportPanel((value) => !value)}
+                onPress={toggleImportPanel}
                 style={({ pressed }) => [
                   styles.compactToggle,
                   styles.compactToggleWide,
                   pressed && styles.pressed,
                 ]}>
-                <Text style={styles.deckPickerToggleText}>Import</Text>
+                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82} style={styles.deckPickerToggleText}>
+                  Import
+                </Text>
                 <Text style={styles.deckPickerToggleChevron}>v</Text>
               </Pressable>
             </View>
@@ -657,7 +749,7 @@ export function HomeCreateSection({
                   {
                     height: deckPickerProgress.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [0, 188],
+                      outputRange: [0, 158],
                     }),
                     opacity: deckPickerProgress.interpolate({
                       inputRange: [0, 1],
@@ -676,15 +768,19 @@ export function HomeCreateSection({
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
+                  decelerationRate="fast"
+                  disableIntervalMomentum
+                  snapToAlignment="start"
+                  snapToInterval={148}
                   contentContainerStyle={styles.deckPicker}>
                   {decks.map((deck) => {
-                    const active = deck.id === selectedDeck?.id;
+                    const active = deck.id === activeDeck?.id;
 
                     return (
                       <Pressable
                         key={deck.id}
                         accessibilityRole="button"
-                        onPress={() => onSelectDeckId(deck.id)}
+                        onPress={() => selectDeckFromPicker(deck.id)}
                         style={({ pressed }) => [
                           styles.deckChip,
                           active && styles.deckChipActive,
@@ -704,21 +800,21 @@ export function HomeCreateSection({
 
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityState={{ disabled: !selectedDeck }}
-                  disabled={!selectedDeck}
-                  onPress={createCard}
+                  accessibilityState={{ disabled: !selectedDeck, expanded: showManagePanel }}
+                  disabled={!activeDeck}
+                  onPress={toggleManagePanel}
                   style={({ pressed }) => [
-                    styles.primaryButton,
-                    !selectedDeck && styles.primaryButtonDisabled,
-                    pressed && selectedDeck && styles.pressed,
+                    styles.manageToggleButton,
+                    !activeDeck && styles.primaryButtonDisabled,
+                    pressed && activeDeck && styles.pressed,
                   ]}>
-                  {selectedDeck ? <CrayonFill tone="create" variant="tight" opacity={0.8} /> : null}
+                  {activeDeck ? <CrayonFill tone="warning" variant="tight" opacity={0.6} /> : null}
                   <Text
                     style={[
-                      styles.primaryButtonText,
-                      !selectedDeck && styles.primaryButtonTextDisabled,
+                      styles.manageToggleButtonText,
+                      !activeDeck && styles.primaryButtonTextDisabled,
                     ]}>
-                    {addCardButtonLabel}
+                    {activeDeck ? (showManagePanel ? 'Hide Manage' : 'Manage deck') : 'Choose deck to manage'}
                   </Text>
                 </Pressable>
               </Animated.View>
@@ -773,18 +869,18 @@ export function HomeCreateSection({
                   <Pressable
                     accessibilityRole="button"
                     accessibilityState={{ disabled: !selectedDeck }}
-                    disabled={!selectedDeck}
+                    disabled={!activeDeck}
                     onPress={handleImportIntoExistingDeck}
                     style={({ pressed }) => [
                       styles.importActionButton,
-                      !selectedDeck && styles.primaryButtonDisabled,
-                      pressed && selectedDeck && styles.pressed,
+                      !activeDeck && styles.primaryButtonDisabled,
+                      pressed && activeDeck && styles.pressed,
                     ]}>
                     <CrayonFill tone="create" variant="tight" opacity={0.74} />
                     <Text
                       style={[
                         styles.importActionButtonText,
-                        !selectedDeck && styles.primaryButtonTextDisabled,
+                        !activeDeck && styles.primaryButtonTextDisabled,
                       ]}>
                       Add file to existing deck
                     </Text>
@@ -848,7 +944,7 @@ export function HomeCreateSection({
               </View>
             ) : null}
 
-            {selectedDeck ? (
+            {activeDeck && showManagePanel ? (
               <View style={styles.managePanel}>
                 <View style={styles.manageHeader}>
                   <View style={styles.manageTitleGroup}>
@@ -871,6 +967,9 @@ export function HomeCreateSection({
                   <ScrollView
                     nestedScrollEnabled
                     showsVerticalScrollIndicator={selectedDeckCards.length > 4}
+                    decelerationRate="fast"
+                    snapToAlignment="start"
+                    snapToInterval={76}
                     style={styles.cardListWindow}
                     contentContainerStyle={styles.cardList}>
                     {selectedDeckCards.map((card) => (

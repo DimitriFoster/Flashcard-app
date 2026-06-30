@@ -959,3 +959,1057 @@ Fixed notebook/note hover highlighting, constrained the notebook title input mor
 src/app/notes/index.tsx
 PROJECT_LOG.md
 ```
+
+
+---
+
+# 2026-06-27
+
+## Notes Scroll, Delete, and Keyboard Behavior
+
+### Summary
+
+Improved sidebar scrolling, added a delete button to the open note editor, and changed note editing so the keyboard requires a deliberate second tap.
+
+### Changes
+
+- Sidebar note list now uses nested scrolling and responder settings intended to make vertical scrolling less sticky.
+- Note drag responder no longer blocks native scroll responders as aggressively.
+- Open notes now show a square trash-can delete button in the top right of the notebook page.
+- Selecting a saved note no longer immediately focuses the editor.
+- The note editor now requires two taps before the keyboard opens:
+  - first tap arms the editor
+  - second tap focuses the text input
+- Notebook name editing still works with one tap.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-27
+
+## Scrolling Notebook Lines
+
+### Summary
+
+Fixed long notes so the lined-paper ruling scrolls with the note text instead of staying fixed behind it.
+
+### Changes
+
+- Increased the number of rendered notebook lines for longer notes.
+- Converted the line layer to an animated layer.
+- Synced the line layer with the note editor `TextInput` scroll position.
+- Reset editor scroll position when opening a different note or creating a blank note.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-27
+
+## Conditional Note Scrolling
+
+### Summary
+
+The note editor now only scrolls when the note text is taller than the visible notebook page.
+
+### Changes
+
+- Tracks editor viewport height.
+- Tracks actual text content height.
+- Enables `TextInput` scrolling only when content flows beyond the visible page.
+- Resets notebook line scroll when the note fits on one page.
+- Clears stale content-height measurements when opening or creating notes.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-27
+
+## Keyboard-Aware Note Editing
+
+### Summary
+
+Adjusted the Notes editor so longer notes remain usable while the mobile keyboard is open.
+
+### Changes
+
+- Added keyboard show/hide listeners.
+- Enabled `KeyboardAvoidingView` height behavior on Android.
+- Keeps editor scrolling available while the keyboard is open.
+- Adds extra bottom padding inside the editor while typing so the cursor can scroll above the keyboard.
+- Prevents the line-scroll position from resetting while the keyboard is open.
+- Slightly compresses the top header while editing to give the notebook page more room.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-27
+
+## Keyboard Gap and Line Clipping Fix
+
+### Summary
+
+Removed the artificial keyboard gap in the note editor and adjusted the ruled-paper layer so it clips with the text area.
+
+### Changes
+
+- Removed Android `KeyboardAvoidingView` height behavior that could leave a lingering gray bar after closing the keyboard.
+- Removed the large keyboard-specific bottom padding inside the note editor.
+- Editor scrolling is again based on whether the text flows beyond the visible notebook page.
+- Wrapped the note text and ruled lines in the same clipped writing surface so lines stop where the visible text area stops.
+- Kept the notebook page's normal bottom cutoff as the place where text and lines disappear.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-27
+
+## Manual Keyboard Viewport and Unified Note Scrolling
+
+### Summary
+
+Reworked the open-note editor so the text and ruled lines scroll as one notepaper surface, and added a manual keyboard inset that shrinks only the writing viewport.
+
+### Changes
+
+- Removed the independent animated line transform.
+- Moved the ruled lines inside the same scrollable content surface as the note text.
+- Changed the note editor from internal `TextInput` scrolling to an outer `ScrollView`.
+- The text input now grows with content while the outer notepaper surface scrolls.
+- Lines and text now share the same clipping behavior.
+- Tracks keyboard height and applies a temporary bottom margin only to the writing viewport, avoiding Android root resize behavior and the lingering gray bar.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-27
+
+## Last-Pass Keyboard Editing Adjustment
+
+### Summary
+
+Removed the keyboard-driven viewport margin that was causing the bottom gray/blank bar and changed keyboard handling to add scrollable room inside the notepaper surface instead.
+
+### Changes
+
+- Removed the manual `marginBottom` applied to the editor viewport.
+- Kept the unified notepaper scrolling where lines and text move together.
+- Added keyboard-aware scroll padding inside the notepaper content instead of resizing the whole app root.
+- Added a `ScrollView` ref so typing while the keyboard is open can keep the active writing area visible.
+- Clears keyboard state on editor blur to prevent stale bottom spacing from sticking around.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-27
+
+## Responsive Notebook Title Controls
+
+### Summary
+
+Adjusted the notebook overview title row so the three square buttons make room for longer notebook names without becoming too small.
+
+### Changes
+
+- Notebook action buttons now shrink gradually as the notebook title gets longer.
+- Buttons stop shrinking at a safe minimum size.
+- Notebook title font size scales down after the title gets long.
+- Notebook title input gets more available width and tighter padding.
+- Button icon sizes now follow the button size.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-27
+
+## Hard-Fit Notebook Title Calculation
+
+### Summary
+
+Notebook title scaling now uses a direct font-size calculation instead of relying on `TextInput` auto-fit behavior.
+
+### Changes
+
+- Calculates title font size from title length and available title input width.
+- Allows buttons to shrink first to a safe minimum.
+- Lets the title font shrink as low as 9px for long notebook names.
+- Removes unreliable `adjustsFontSizeToFit` behavior from the notebook title `TextInput`.
+- Hard-bounds the notebook title input width so it cannot fight the action buttons.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-27
+
+## Notebook Title Width and Blank Default
+
+### Summary
+
+Notebook title input now resizes with the title length and blank notebook names save back to the default `Notebook` title.
+
+### Changes
+
+- Title input width now grows with the current title length instead of staying at a large fixed width.
+- Title input is capped more conservatively so the rounded left edge stays inside the notebook panel.
+- Long titles still shrink the font to fit once the input reaches its max safe width.
+- Empty notebook names now save as `Notebook`.
+- The title draft is reset to the saved default after blur.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-27
+
+## Notebook Title Slot Fit
+
+### Summary
+
+Moved the notebook title input into a bounded flex slot so the full rounded text box stays inside the open notebook panel.
+
+### Changes
+
+- The title input is now wrapped in a flexible slot that owns the available space before the action buttons.
+- The rounded text box can grow up to its natural width but is capped by the slot.
+- Removed the screen-width based max-width estimate that could overstate available panel space.
+- The action row no longer clips the title input from the left.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-27
+
+## Reapplied Crayon Textures with Static PNG Assets
+
+### Summary
+
+Reapplied the Create / Review / Notes textured pastel backgrounds using the approved green, blue, and yellow images.
+
+### Changes
+
+- Replaced the solid-color fallback `CrayonFill` with a static local-image texture implementation.
+- Added three baked texture PNGs:
+  - green for Create
+  - blue for Review
+  - yellow for Notes
+- Kept rendering simple on mobile by using a single non-repeating image per tone instead of SVG/repeat pattern code.
+- Texture selection is centralized in `src/components/ui/crayon-fill.tsx`, so any section already using `CrayonFill` should pick up the new textures automatically.
+
+### Files Touched
+
+```txt
+src/components/ui/crayon-fill.tsx
+assets/images/crayon/create-green-texture.png
+assets/images/crayon/review-blue-texture.png
+assets/images/crayon/notes-yellow-texture.png
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-27
+
+## Spaced Repetition Foundation
+
+### Summary
+
+Added the first real spaced-repetition engine layer: card states, learning/relearning steps, review queue ordering, review logs, and undo for the last graded review.
+
+### Changes
+
+- Added card states:
+  - `new`
+  - `learning`
+  - `review`
+  - `relearning`
+  - `suspended`
+- Added `learningStepIndex` to cards.
+- New cards now enter short learning steps before graduating to long-term review.
+- Failed review cards now enter relearning instead of only changing interval math.
+- Review queue now orders cards as:
+  1. due learning cards
+  2. due relearning cards
+  3. due review cards
+  4. limited new cards
+- Added a daily new-card limit constant.
+- Added review logs for graded reviews.
+- Added undo support for the last graded review.
+- Added an Undo button to the focused review screen after grading a card.
+- Fixed graded-card advancement so the next card in the due queue is not skipped after the reviewed card leaves the queue.
+
+### Files Touched
+
+```txt
+src/types/flashcard.ts
+src/lib/review-scheduling.ts
+src/lib/review-queue.ts
+src/storage/flashcards.ts
+src/app/review/[deckId].tsx
+src/components/review/deck-review-session.tsx
+src/components/review/deck-review-session.styles.ts
+PROJECT_LOG.md
+```
+
+---
+
+# 2026-06-27
+
+## Import, Edit, Stats, and Browse Search
+
+### Summary
+
+Added the next learning-experience features: CSV/TSV/TXT import, JSON app backup restore/export, card editing during review, a scheduler stats page, and Browse deck/card search.
+
+### Changes
+
+- Added a paste-based CSV/TSV/TXT importer in the Create section.
+- Added an Import dropdown to the right of Pick deck.
+- Import supports:
+  - Add to existing deck
+  - Create new deck from file
+  - Skip duplicates for existing-deck imports
+  - Import duplicates anyway for existing-deck imports
+- Imported cards are treated as new SRS cards.
+- Added JSON app backup export and restore.
+- Added card editing during focused review.
+- Added a simple scheduler stats page at `/review/stats`.
+- Added a Stats button on the spaced repetition page.
+- Added a Browse search bar that searches deck names, card prompts, and card answers.
+
+### Files Touched
+
+```txt
+src/app/index.tsx
+src/app/review/[deckId].tsx
+src/app/review/browse.tsx
+src/app/review/index.tsx
+src/app/review/stats.tsx
+src/components/home/create-section.tsx
+src/components/home/create-section.styles.ts
+src/components/review/deck-review-session.tsx
+src/components/review/deck-review-session.styles.ts
+src/lib/import-parser.ts
+src/storage/flashcards.ts
+PROJECT_LOG.md
+```
+
+### Notes
+
+The importer currently accepts pasted file contents instead of using a native file picker. This avoids adding document-picker dependencies while the app is still stabilizing.
+
+
+---
+
+# 2026-06-27
+
+## Device File Picker Import Flow
+
+### Summary
+
+Changed the Create-section import flow from pasted card contents to device file picking through Expo DocumentPicker, and separated JSON app backup into its own mechanism.
+
+### Changes
+
+- Added Expo document picking for CSV / TSV / TXT card imports.
+- Added file reading through Expo FileSystem legacy API.
+- Import dropdown now has action buttons:
+  - Add file to existing deck
+  - Create new deck from file
+  - JSON app backup
+- Add-to-existing import uses the currently selected deck.
+- Duplicate handling is available for add-to-existing imports.
+- Create-new-deck import creates a deck name from the first detected deck column value, falling back to the filename.
+- JSON backup restore now has a separate file-picker path.
+- Backup export remains visible as copyable JSON.
+
+### Files Touched
+
+```txt
+package.json
+src/components/home/create-section.tsx
+src/components/home/create-section.styles.ts
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Native Module Guard for File Import
+
+### Summary
+
+Prevented the app from crashing at launch when the installed development build does not contain the native `ExpoDocumentPicker` module.
+
+### Changes
+
+- Removed top-level static imports for `expo-document-picker` and `expo-file-system`.
+- Loads file picker modules only when the user presses an import/restore button.
+- If the native module is unavailable, the app now shows a status message instead of failing during startup.
+- Added import-panel helper text explaining that device file upload needs Expo Go or a rebuilt development build.
+
+### Files Touched
+
+```txt
+src/components/home/create-section.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Browse Search Opens Matching Cards
+
+### Summary
+
+Changed Browse Decks so card-search results stay filtered when a deck is opened.
+
+### Changes
+
+- Browse search now distinguishes deck-name matches from card-text matches.
+- If the search matches card prompts/answers, the deck preview shows the matching card count.
+- Opening that deck passes the card-search query into the deck route.
+- The deck route filters browse-mode cards by that search query.
+- Back navigation returns to Browse Decks with the same search text restored.
+- Deck-name-only searches still open the full deck.
+
+### Files Touched
+
+```txt
+src/app/review/browse.tsx
+src/app/review/[deckId].tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Review Preview Bubble Titles
+
+### Summary
+
+Cleaned up the review/browse deck preview cards by removing the duplicated black deck-title text and making the top-right deck bubble the primary title.
+
+### Changes
+
+- Removed the large black deck title from preview panels.
+- Kept the helper/count text on the left side of the preview header.
+- Enlarged the top-right deck badge.
+- Increased badge text weight and size so the badge reads as the deck title.
+
+### Files Touched
+
+```txt
+src/components/review/preview-panel.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Notes Save Button Keeps Draft Open
+
+### Summary
+
+Fixed the Notes screen Save button so it actually saves the current note without closing it or clearing the editor.
+
+### Changes
+
+- Replaced the old save-and-start-new behavior with a save-current-note behavior.
+- Pressing Save now persists the note and keeps the saved note open.
+- The existing New button remains responsible for starting a blank note.
+- Notebook notes now also stay open after saving instead of returning to the notebook overview.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Notes Save Confirmation and Edit Persistence
+
+### Summary
+
+Fixed follow-up saves in the Notes screen and added a low-key save confirmation.
+
+### Changes
+
+- Added a body ref so the Save button reads the latest editor text even if the text input has not finished a render cycle.
+- Save now updates the local notes list immediately after writing to storage.
+- Existing notes keep their selected note ID after saving, so later edits save back into the same note.
+- Added a small "Saved" pill under the top bar after a successful save.
+- The confirmation fades away automatically after a short delay.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Notes Save Verification
+
+### Summary
+
+Made Notes saving stricter so the Save confirmation only appears after the current editor body has been written and verified from storage.
+
+### Changes
+
+- Added refs for the active note ID and notebook ID so Save does not depend on possibly stale React state.
+- Save now writes the current draft body using the active note ID ref.
+- Save now reloads the note from storage and verifies the stored body matches the current editor body.
+- The app only shows "Saved" after verification succeeds.
+- If verification fails, the save status shows "Save failed" instead.
+- Added an end-editing sync for the note body so keyboard/blur edge cases keep the draft body current.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Notes Autosave for Existing Notes
+
+### Summary
+
+Added autosave for existing notes to avoid stale-text saves from the top Save button.
+
+### Changes
+
+- Existing notes now save shortly after each edit.
+- The Save button now clears any pending autosave and force-saves the current draft body.
+- Shared the manual save and autosave logic through one verified save helper.
+- New unsaved notes still require the first manual Save so an empty draft is not created accidentally.
+- The "Saved" message remains tied to manual Save, while autosave runs quietly in the background.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Notes Safe Switching
+
+### Summary
+
+Fixed note switching so edits are not lost when opening another note before leaving the Notes page.
+
+### Changes
+
+- Note switching now force-saves the current draft before opening another note.
+- The screen no longer relies only on the `isDirty` state, which can be one render behind.
+- Opening another note now reloads that note from storage by ID instead of trusting the rendered list object.
+- Removed the `onEndEditing` draft sync because it could fire after switching notes and restore stale text.
+- New note, notebook overview, and notebook-note creation actions also force-save the current draft first.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Notes Read-Scroll Before Typing
+
+### Summary
+
+Adjusted the Notes editor interaction so users can scroll an open note immediately without accidentally opening the keyboard, while typing still requires two deliberate taps.
+
+### Changes
+
+- Editor scrolling is enabled immediately instead of waiting on the editor's scrollability calculation.
+- The scroll indicator still only appears when the note content is actually taller than the viewport.
+- Added a scroll-begin handler that keeps the editor in read mode when the keyboard is not already visible.
+- The unarmed TextInput no longer captures touch events, so swipes can go straight to the ScrollView.
+- First tap on the note page arms the editor.
+- Second tap focuses the TextInput and opens the keyboard.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Notes Line Sync Fix
+
+### Summary
+
+Fixed long-note scrolling where ruled notebook lines and note text could drift out of sync.
+
+### Changes
+
+- Removed the fixed notebook line count.
+- The ruled lines now generate dynamically based on the current scrollable surface height.
+- Snapped the editor surface height to the notebook line grid.
+- The TextInput and ruled-line layer now use the same snapped surface height.
+- Moved the text top padding into a shared constant derived from the line top offset.
+- Disabled Android font padding inside the editor TextInput to reduce line-height drift over long notes.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Notes Top Offset Repair
+
+### Summary
+
+Fixed a crash caused by stale notebook-line constants after the Notes line-sync patch.
+
+### Changes
+
+- Removed the old `NOTEBOOK_TOP_OFFSET` and `NOTEBOOK_LINE_COUNT` references from the notebook line layer style.
+- The notebook line layer now receives the current dynamic editor surface height directly.
+- This repairs the runtime error: `Property 'NOTEBOOK_TOP_OFFSET' doesn't exist`.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Notes Read Layer Line Sync
+
+### Summary
+
+Changed the Notes editor so open-note reading uses a separate read-mode text layer instead of an unarmed TextInput.
+
+### Changes
+
+- When the editor is not armed, notes render through a normal Text layer.
+- The TextInput only mounts after the first tap arms the editor.
+- This keeps immediate scrolling/read mode safer and should reduce long-scroll line drift.
+- Both the read text layer and TextInput still use the same notebook line height and padding constants.
+- Two-tap typing behavior is preserved.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Hide Note Lines While Editing
+
+### Summary
+
+Stopped ruled notebook lines from showing while actively editing notes.
+
+### Changes
+
+- Ruled lines now appear in read mode only.
+- When the editor is armed and the TextInput is active, the lines are hidden.
+- This avoids Android multiline TextInput line-height drift against a separate line overlay.
+- Leaving edit mode brings the lined-paper read view back.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Remove Open Note Ruled Lines
+
+### Summary
+
+Removed the ruled-line overlay from the open note editor because Android multiline text rendering was drifting against it and the read/edit transition caused visible line flicker.
+
+### Changes
+
+- Removed the ruled-line layer from the open note editor.
+- Removed the dynamic `NotebookLines` component from the Notes screen.
+- Removed stale notebook-line styles and line-position constants.
+- Kept the plain paper surface, two-tap typing behavior, and immediate scrolling.
+- This favors a stable editing/reading surface over fake lined-paper precision.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Notes No Jump While Editing
+
+### Summary
+
+Fixed open notes jumping to the bottom after scrolling and then typing or backspacing.
+
+### Changes
+
+- Removed the automatic `scrollToEnd` call from note body changes.
+- Typing and backspacing now preserve the current scroll position.
+- Autosave still runs after edits.
+- Keyboard padding behavior remains unchanged.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Stable Notes Scroll Surface
+
+### Summary
+
+Reduced note editor jerking by keeping one stable TextInput mounted during both read and edit states.
+
+### Changes
+
+- Removed the read-layer/TextInput swap that could reflow the editor surface mid-gesture.
+- Removed the scroll-begin handler that de-armed the editor during drag.
+- The TextInput now stays mounted at all times.
+- When unarmed, the TextInput displays text but ignores touches and does not open the keyboard.
+- First tap still arms editing.
+- Second tap still focuses the keyboard.
+- Scrolling no longer flips editor mode.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Notes Keyboard Caret Nudge
+
+### Summary
+
+Restored keyboard accommodation without bringing back the old jump-to-bottom behavior.
+
+### Changes
+
+- Added scroll-position tracking for the open note editor.
+- Added caret selection tracking for the active TextInput.
+- Added a targeted `keepCaretVisible` helper.
+- Typing now nudges the editor only when the estimated caret position would fall behind the keyboard.
+- Removed any need for `scrollToEnd` on text changes.
+- The current scroll position is preserved unless the caret needs room above the keyboard.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Notes Selection Event Repair
+
+### Summary
+
+Fixed a crash caused by reading the TextInput selection event after React Native had released the synthetic event.
+
+### Changes
+
+- Copies `event.nativeEvent.selection` into a plain variable immediately.
+- Uses the copied selection inside `requestAnimationFrame`.
+- Makes `keepCaretVisible` tolerate null or missing selection values.
+- Fixes: `Cannot read property 'selection' of null`.
+- Removes the synthetic event pooling console warning caused by the same issue.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Notes Collapsible Saved Panel
+
+### Summary
+
+Added a collapsible Saved notes/notebooks panel so the Notes editor opens in a wider writing mode by default.
+
+### Changes
+
+- Saved notes/notebooks panel is now closed by default when opening Notes.
+- Added a narrow "Saved" tab to reopen the panel.
+- Added a close button inside the Saved panel header.
+- Opening and closing the panel preserves the current note, body text, notebook state, and editor mode.
+- If the editor was active, the app attempts to restore focus after opening or closing the panel.
+- Caret-width estimation now accounts for whether the Saved panel is open or closed.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Notes Collapsed Saved Rail Polish
+
+### Summary
+
+Polished the collapsed Saved rail and made the Saved panel controls easier to use.
+
+### Changes
+
+- Collapsed Saved label now stays on one line.
+- Collapsed rail now uses the yellow notes color scheme.
+- Added a small plus button on the collapsed rail for starting a new note.
+- Moved the Saved panel collapse button beside the Saved title so it is not hidden behind the editor.
+- Made the open panel header less cramped.
+- Added z-index/elevation to the close button for safer visibility.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Notes Saved Header And Empty Save Pulse
+
+### Summary
+
+Adjusted the Saved panel controls and added a visible empty-save acknowledgement.
+
+### Changes
+
+- Moved the Saved panel collapse button underneath the New button.
+- Kept the "Hold + drag to group" text below the header without pushing into it.
+- Forced the Saved title to stay on one line with font scaling.
+- Added a short red pulse/flash to the visible New note control when Save is pressed with no note text.
+- The pulse applies to the open-panel New button and the collapsed-panel plus button.
+- Empty save now also shows "Add text first" in the save status pill.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Notes New Button Empty Press Pulse
+
+### Summary
+
+Made the New note controls visibly acknowledge presses when the user is already on a blank new note.
+
+### Changes
+
+- Added an `isBlankNewNoteDraft` helper.
+- Pressing New while already on a blank unsaved note now pulses the New controls red.
+- The open Saved-panel New button and collapsed rail + button both use the existing red pulse style.
+- Shows "Already blank" in the save status pill instead of silently doing nothing.
+- Existing behavior is preserved when the current note has text or is an existing saved note.
+
+### Files Touched
+
+```txt
+src/app/notes/index.tsx
+PROJECT_LOG.md
+```
+
+
+---
+
+# 2026-06-28
+
+## Light Scroll Snapping
+
+### Summary
+
+Added subtle snap/settle behavior to carousel and panel-style scrolling areas.
+
+### Changes
+
+- Deck picker carousel now snaps cleanly from deck chip to deck chip.
+- Browse deck carousel now snaps from preview panel to preview panel.
+- Managed card list in the Create panel now has light row snapping.
+- Saved notes/notebooks list now has light card snapping.
+- Notebook overview note list now has light card snapping.
+- Home and Browse vertical page scrolls now settle faster over large stacked panels.
+- The open note text editor was intentionally left unsnapped to avoid fighting typing and caret movement.
+
+### Files Touched
+
+```txt
+src/app/index.tsx
+src/app/notes/index.tsx
+src/app/review/browse.tsx
+src/components/home/create-section.tsx
+PROJECT_LOG.md
+```

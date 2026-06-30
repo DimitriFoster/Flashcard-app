@@ -164,6 +164,8 @@ export default function HomeScreen() {
   return (
     <ScrollView
       style={styles.screen}
+      directionalLockEnabled
+      decelerationRate="fast"
       contentContainerStyle={[
         styles.content,
         {

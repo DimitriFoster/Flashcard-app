@@ -39,9 +39,8 @@ import {
 } from '@/storage/notes';
 import type { Notebook, StudyNote } from '@/types/note';
 
-const NOTEBOOK_LINE_COUNT = 240;
 const NOTEBOOK_LINE_HEIGHT = 28;
-const NOTEBOOK_TOP_OFFSET = 70;
+const NOTEBOOK_TEXT_TOP_PADDING = 47;
 
 type DropTarget = {
   id: string;
@@ -98,23 +97,6 @@ function sortNotesByCreatedAt(notes: StudyNote[], direction: SortDirection) {
   );
 }
 
-function NotebookLines() {
-  return (
-    <View pointerEvents="none" style={styles.notebookLines}>
-      {Array.from({ length: NOTEBOOK_LINE_COUNT }).map((_, index) => (
-        <View
-          key={index}
-          style={[
-            styles.notebookLine,
-            {
-              top: NOTEBOOK_TOP_OFFSET + index * NOTEBOOK_LINE_HEIGHT,
-            },
-          ]}
-        />
-      ))}
-    </View>
-  );
-}
 
 type DraggableNoteCardProps = {
   note: StudyNote;
@@ -334,12 +316,23 @@ export default function NotesScreen() {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [pulseNotebookId, setPulseNotebookId] = useState<string | undefined>();
   const [notebookSortDirection, setNotebookSortDirection] = useState<SortDirection>('newest');
+  const [saveStatusMessage, setSaveStatusMessage] = useState('');
+  const [isSavedPanelOpen, setIsSavedPanelOpen] = useState(false);
+  const [isEmptyNoteWarningVisible, setIsEmptyNoteWarningVisible] = useState(false);
 
   const noteRefs = useRef<Record<string, View | null>>({});
   const notebookRefs = useRef<Record<string, View | null>>({});
   const editorInputRef = useRef<TextInput | null>(null);
   const editorScrollRef = useRef<ScrollView | null>(null);
+  const bodyRef = useRef('');
+  const selectedNoteIdRef = useRef<string | undefined>();
+  const selectedNotebookIdRef = useRef<string | undefined>();
+  const saveStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const emptyNoteWarningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorScrollY = useRef(new Animated.Value(0)).current;
+  const editorScrollOffsetRef = useRef(0);
+  const editorSelectionRef = useRef({ start: 0, end: 0 });
   const dropTargetsRef = useRef<DropTarget[]>([]);
   const dragWasActiveRef = useRef(false);
   const notebookPulse = useRef(new Animated.Value(0)).current;
@@ -382,6 +375,7 @@ export default function NotesScreen() {
 
   const isDirty = selectedNote ? selectedNote.body !== body : body.trim().length > 0;
   const sidePanelWidth = Math.min(Math.max(width * 0.3, 108), 162);
+  const editorAvailableWidth = isSavedPanelOpen ? width - sidePanelWidth : width;
   const selectedNotebookDraftName = selectedNotebook
     ? notebookNameDrafts[selectedNotebook.id] ?? selectedNotebook.name
     : '';
@@ -407,20 +401,44 @@ export default function NotesScreen() {
     editorViewportHeight,
     editorContentHeight + editorBottomPadding + keyboardScrollPadding
   );
+  const editorSurfaceHeight = Math.ceil(editorScrollContentHeight / NOTEBOOK_LINE_HEIGHT) * NOTEBOOK_LINE_HEIGHT;
   const shouldScrollEditor =
     editorViewportHeight > 0 &&
     editorScrollContentHeight > editorViewportHeight + NOTEBOOK_LINE_HEIGHT;
-  const shouldAllowEditorScroll = shouldScrollEditor;
+  const shouldAllowEditorScroll = true;
 
   useEffect(() => {
     refreshNotesState();
-    setSelectedNoteId(undefined);
-    setSelectedNotebookId(undefined);
+    setActiveNoteId(undefined);
+    setActiveNotebookId(undefined);
     setIsNotebookOverviewOpen(false);
+    setIsSavedPanelOpen(false);
     setIsEditorArmed(false);
     editorScrollY.setValue(0);
+    editorScrollOffsetRef.current = 0;
     setEditorContentHeight(0);
-    setBody('');
+    bodyRef.current = '';
+    setDraftBody('');
+  }, []);
+
+  useEffect(() => {
+    bodyRef.current = body;
+  }, [body]);
+
+  useEffect(() => {
+    return () => {
+      if (saveStatusTimeoutRef.current) {
+        clearTimeout(saveStatusTimeoutRef.current);
+      }
+
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+
+      if (emptyNoteWarningTimeoutRef.current) {
+        clearTimeout(emptyNoteWarningTimeoutRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -446,8 +464,19 @@ export default function NotesScreen() {
   useEffect(() => {
     if (!shouldScrollEditor && !isKeyboardVisible) {
       editorScrollY.setValue(0);
+      editorScrollOffsetRef.current = 0;
     }
   }, [editorScrollY, isKeyboardVisible, shouldScrollEditor]);
+
+  useEffect(() => {
+    if (!isKeyboardVisible || !isEditorArmed) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      keepCaretVisible(editorSelectionRef.current, bodyRef.current, { animated: true });
+    });
+  }, [editorSurfaceHeight, editorViewportHeight, isEditorArmed, isKeyboardVisible, keyboardHeight]);
 
   function refreshNotesState() {
     const nextNotes = getNotes();
@@ -463,66 +492,202 @@ export default function NotesScreen() {
     };
   }
 
+  function setActiveNoteId(noteId: string | undefined) {
+    selectedNoteIdRef.current = noteId;
+    setSelectedNoteId(noteId);
+  }
+
+  function setActiveNotebookId(notebookId: string | undefined) {
+    selectedNotebookIdRef.current = notebookId;
+    setSelectedNotebookId(notebookId);
+  }
+
+  function setDraftBody(value: string) {
+    bodyRef.current = value;
+    setBody(value);
+  }
+
+  function showSaveStatus(message = 'Saved') {
+    setSaveStatusMessage(message);
+
+    if (saveStatusTimeoutRef.current) {
+      clearTimeout(saveStatusTimeoutRef.current);
+    }
+
+    saveStatusTimeoutRef.current = setTimeout(() => {
+      setSaveStatusMessage('');
+    }, 1500);
+  }
+
+  function pulseEmptyNoteActions() {
+    setIsEmptyNoteWarningVisible(true);
+
+    if (emptyNoteWarningTimeoutRef.current) {
+      clearTimeout(emptyNoteWarningTimeoutRef.current);
+    }
+
+    emptyNoteWarningTimeoutRef.current = setTimeout(() => {
+      setIsEmptyNoteWarningVisible(false);
+    }, 340);
+  }
+
+  function upsertSavedNoteLocally(savedNote: StudyNote) {
+    setNotes((currentNotes) => {
+      const withoutSavedNote = currentNotes.filter((note) => note.id !== savedNote.id);
+
+      return [savedNote, ...withoutSavedNote].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    });
+  }
+
+  function saveBodyToStorage(bodyToSave: string, options?: { silent?: boolean }) {
+    const currentNoteId = selectedNoteIdRef.current ?? selectedNoteId;
+    const currentNotebookId = selectedNotebookIdRef.current ?? selectedNotebookId;
+
+    if (!currentNoteId && bodyToSave.trim().length === 0) {
+      return undefined;
+    }
+
+    const storedExistingNote = currentNoteId
+      ? getNotes().find((note) => note.id === currentNoteId)
+      : undefined;
+    const savedNote = saveNote({
+      id: currentNoteId,
+      body: bodyToSave,
+      notebookId: storedExistingNote?.notebookId ?? selectedNote?.notebookId ?? currentNotebookId,
+    });
+
+    const refreshed = refreshNotesState();
+    const verifiedNote = refreshed.notes.find((note) => note.id === savedNote.id);
+
+    if (!verifiedNote || verifiedNote.body !== bodyToSave) {
+      if (!options?.silent) {
+        showSaveStatus('Save failed');
+      }
+
+      return undefined;
+    }
+
+    upsertSavedNoteLocally(verifiedNote);
+    setActiveNoteId(verifiedNote.id);
+    setActiveNotebookId(verifiedNote.notebookId);
+
+    if (bodyRef.current === bodyToSave) {
+      setDraftBody(verifiedNote.body);
+    }
+
+    if (!options?.silent) {
+      showSaveStatus('Saved');
+    }
+
+    return verifiedNote;
+  }
+
+  function scheduleAutoSave(bodyToSave: string) {
+    const currentNoteId = selectedNoteIdRef.current ?? selectedNoteId;
+
+    if (!currentNoteId) {
+      return;
+    }
+
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      saveBodyToStorage(bodyToSave, { silent: true });
+    }, 350);
+  }
+
   function persistCurrentDraft() {
     /**
      * A brand-new empty draft does not need to be stored.
      * Existing notes are still saved even if the user clears the body on purpose.
      */
-    if (!selectedNoteId && body.trim().length === 0) {
-      return undefined;
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+      autoSaveTimeoutRef.current = null;
     }
 
-    const savedNote = saveNote({
-      id: selectedNoteId,
-      body,
-      notebookId: selectedNote?.notebookId ?? selectedNotebookId,
-    });
-
-    refreshNotesState();
-    setSelectedNoteId(savedNote.id);
-    setSelectedNotebookId(savedNote.notebookId);
-    setBody(savedNote.body);
-
-    return savedNote;
+    return saveBodyToStorage(bodyRef.current);
   }
 
-  function openBlankNote() {
-    if (isDirty) {
-      persistCurrentDraft();
-    }
+  function shouldPersistCurrentDraft() {
+    const currentNoteId = selectedNoteIdRef.current ?? selectedNoteId;
+    const currentBody = bodyRef.current;
 
-    setSelectedNoteId(undefined);
-    setSelectedNotebookId(undefined);
-    setIsNotebookOverviewOpen(false);
-    setBody('');
+    return Boolean(currentNoteId) || currentBody.trim().length > 0;
   }
 
-  function openBlankNoteInNotebook(notebook: Notebook) {
-    if (isDirty) {
-      persistCurrentDraft();
+  function isBlankNewNoteDraft() {
+    const currentNoteId = selectedNoteIdRef.current ?? selectedNoteId;
+
+    return !currentNoteId && bodyRef.current.trim().length === 0;
+  }
+
+  function openStoredNoteById(noteId: string, fallbackNote?: StudyNote) {
+    const latestNote = getNotes().find((note) => note.id === noteId) ?? fallbackNote;
+
+    if (!latestNote) {
+      refreshNotesState();
+      return;
     }
 
-    setSelectedNoteId(undefined);
-    setSelectedNotebookId(notebook.id);
+    setActiveNoteId(latestNote.id);
+    setActiveNotebookId(latestNote.notebookId);
     setIsNotebookOverviewOpen(false);
     setIsEditorArmed(false);
     editorScrollY.setValue(0);
+    editorScrollOffsetRef.current = 0;
+    editorSelectionRef.current = { start: 0, end: 0 };
     setEditorContentHeight(0);
-    setBody('');
+    setDraftBody(latestNote.body);
   }
 
-  function openNotebook(notebook: Notebook) {
-    if (isDirty) {
+  function openBlankNote() {
+    if (isBlankNewNoteDraft()) {
+      pulseEmptyNoteActions();
+      showSaveStatus('Already blank');
+      return;
+    }
+
+    if (shouldPersistCurrentDraft()) {
       persistCurrentDraft();
     }
 
-    setSelectedNoteId(undefined);
-    setSelectedNotebookId(notebook.id);
+    setActiveNoteId(undefined);
+    setActiveNotebookId(undefined);
+    setIsNotebookOverviewOpen(false);
+    setDraftBody('');
+  }
+
+  function openBlankNoteInNotebook(notebook: Notebook) {
+    if (shouldPersistCurrentDraft()) {
+      persistCurrentDraft();
+    }
+
+    setActiveNoteId(undefined);
+    setActiveNotebookId(notebook.id);
+    setIsNotebookOverviewOpen(false);
+    setIsEditorArmed(false);
+    editorScrollY.setValue(0);
+    editorScrollOffsetRef.current = 0;
+    editorSelectionRef.current = { start: 0, end: 0 };
+    setEditorContentHeight(0);
+    setDraftBody('');
+  }
+
+  function openNotebook(notebook: Notebook) {
+    if (shouldPersistCurrentDraft()) {
+      persistCurrentDraft();
+    }
+
+    setActiveNoteId(undefined);
+    setActiveNotebookId(notebook.id);
     setIsNotebookOverviewOpen(true);
     setIsEditorArmed(false);
     editorScrollY.setValue(0);
     setEditorContentHeight(0);
-    setBody('');
+    setDraftBody('');
   }
 
   function openExistingNote(note: StudyNote) {
@@ -534,21 +699,21 @@ export default function NotesScreen() {
       return;
     }
 
-    if (note.id === selectedNoteId) {
+    const currentNoteId = selectedNoteIdRef.current ?? selectedNoteId;
+
+    if (note.id === currentNoteId) {
       return;
     }
 
-    if (isDirty) {
+    if (shouldPersistCurrentDraft()) {
       persistCurrentDraft();
     }
 
-    setSelectedNoteId(note.id);
-    setSelectedNotebookId(note.notebookId);
-    setIsNotebookOverviewOpen(false);
-    setIsEditorArmed(false);
-    editorScrollY.setValue(0);
-    setEditorContentHeight(0);
-    setBody(note.body);
+    /**
+     * Do not trust the note object from the rendered list after saving.
+     * It may be one render behind. Re-read by ID from storage before opening.
+     */
+    openStoredNoteById(note.id, note);
   }
 
   function handleEditorSurfacePress() {
@@ -564,38 +729,101 @@ export default function NotesScreen() {
     editorInputRef.current?.focus();
   }
 
-  function handleEditorBodyChange(value: string) {
-    setBody(value);
-
-    /**
-     * When the keyboard overlays the lower part of the screen, don't resize the
-     * whole Android root view. Instead, keep the scrollable paper surface moving
-     * toward the active writing area.
-     */
-    if (isKeyboardVisible) {
-      requestAnimationFrame(() => {
-        editorScrollRef.current?.scrollToEnd({ animated: true });
-      });
-    }
-  }
-
-  function saveAndStartNewNote() {
-    const savedNote = persistCurrentDraft();
-
-    if (savedNote?.notebookId) {
-      setSelectedNoteId(undefined);
-      setSelectedNotebookId(savedNote.notebookId);
-      setIsNotebookOverviewOpen(true);
-      setBody('');
+  function keepCaretVisible(
+    selection = editorSelectionRef.current,
+    value = bodyRef.current,
+    options: { animated?: boolean } = {}
+  ) {
+    if (!isKeyboardVisible || !isEditorArmed || editorViewportHeight <= 0) {
       return;
     }
 
-    if (savedNote) {
-      setSelectedNoteId(undefined);
-      setSelectedNotebookId(undefined);
-      setIsNotebookOverviewOpen(false);
-      setBody('');
+    const safeSelection = selection ?? editorSelectionRef.current ?? { start: 0, end: 0 };
+    const selectionEnd = Math.min(Math.max(safeSelection.end ?? 0, 0), value.length);
+    const textBeforeCaret = value.slice(0, selectionEnd);
+    const linesBeforeCaret = textBeforeCaret.split('\n');
+    const explicitLineIndex = Math.max(linesBeforeCaret.length - 1, 0);
+    const currentLineText = linesBeforeCaret[linesBeforeCaret.length - 1] ?? '';
+    const estimatedTextWidth = Math.max(160, editorAvailableWidth - 116);
+    const estimatedCharsPerLine = Math.max(18, Math.floor(estimatedTextWidth / 9));
+    const estimatedSoftWrapRows = Math.floor(currentLineText.length / estimatedCharsPerLine);
+    const estimatedCaretLine = explicitLineIndex + estimatedSoftWrapRows;
+    const caretY = NOTEBOOK_TEXT_TOP_PADDING + (estimatedCaretLine + 1) * NOTEBOOK_LINE_HEIGHT;
+    const visibleTop = editorScrollOffsetRef.current;
+    const safeVisibleBottom =
+      visibleTop + editorViewportHeight - keyboardScrollPadding - NOTEBOOK_LINE_HEIGHT * 2;
+
+    if (caretY <= safeVisibleBottom) {
+      return;
     }
+
+    const targetY =
+      caretY - (editorViewportHeight - keyboardScrollPadding - NOTEBOOK_LINE_HEIGHT * 3);
+    const maxY = Math.max(0, editorSurfaceHeight - editorViewportHeight);
+    const nextY = Math.min(Math.max(targetY, 0), maxY);
+
+    if (Math.abs(nextY - visibleTop) < 4) {
+      return;
+    }
+
+    editorScrollOffsetRef.current = nextY;
+    editorScrollRef.current?.scrollTo({ y: nextY, animated: options.animated ?? true });
+  }
+
+  function handleEditorBodyChange(value: string) {
+    setDraftBody(value);
+    scheduleAutoSave(value);
+
+    /**
+     * Keep the caret above the keyboard without yanking the editor to the end.
+     */
+    requestAnimationFrame(() => {
+      keepCaretVisible(editorSelectionRef.current, value, { animated: true });
+    });
+  }
+
+  function saveCurrentNote() {
+    const savedNote = persistCurrentDraft();
+
+    if (!savedNote) {
+      pulseEmptyNoteActions();
+      showSaveStatus('Add text first');
+      return;
+    }
+
+    /**
+     * Saving should keep the user in the same note. The New button is the action
+     * that clears the editor or starts a fresh draft.
+     */
+    setActiveNoteId(savedNote.id);
+    setActiveNotebookId(savedNote.notebookId);
+    setIsNotebookOverviewOpen(false);
+    setDraftBody(savedNote.body);
+  }
+
+  function restoreEditorFocusIfNeeded(shouldFocus: boolean) {
+    if (!shouldFocus) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      setIsEditorArmed(true);
+      editorInputRef.current?.focus();
+    });
+  }
+
+  function openSavedPanel() {
+    const shouldRefocusEditor = isEditorArmed;
+
+    setIsSavedPanelOpen(true);
+    restoreEditorFocusIfNeeded(shouldRefocusEditor);
+  }
+
+  function closeSavedPanel() {
+    const shouldRefocusEditor = isEditorArmed;
+
+    setIsSavedPanelOpen(false);
+    restoreEditorFocusIfNeeded(shouldRefocusEditor);
   }
 
   function goHome() {
@@ -628,14 +856,14 @@ export default function NotesScreen() {
         text: 'Delete note',
         style: 'destructive',
         onPress: () => {
-          const wasSelected = note.id === selectedNoteId;
+          const wasSelected = note.id === (selectedNoteIdRef.current ?? selectedNoteId);
 
           if (deleteStoredNote(note.id)) {
             refreshNotesState();
 
             if (wasSelected) {
-              setSelectedNoteId(undefined);
-              setBody('');
+              setActiveNoteId(undefined);
+              setDraftBody('');
               setIsNotebookOverviewOpen(Boolean(note.notebookId));
             }
           }
@@ -660,10 +888,10 @@ export default function NotesScreen() {
               setNotes(result.notes);
               setNotebooks(result.notebooks);
               setNotebookNameDrafts(createNotebookDrafts(result.notebooks));
-              setSelectedNotebookId(undefined);
+              setActiveNotebookId(undefined);
               setIsNotebookOverviewOpen(false);
-              setSelectedNoteId(undefined);
-              setBody('');
+              setActiveNoteId(undefined);
+              setDraftBody('');
             }
           },
         },
@@ -786,8 +1014,8 @@ export default function NotesScreen() {
         setNotebooks(result.notebooks);
         setNotebookNameDrafts(createNotebookDrafts(result.notebooks));
 
-        if (selectedNoteId === sourceNote.id) {
-          setSelectedNotebookId(undefined);
+        if ((selectedNoteIdRef.current ?? selectedNoteId) === sourceNote.id) {
+          setActiveNotebookId(undefined);
         }
       }
     }
@@ -978,6 +1206,9 @@ export default function NotesScreen() {
           nestedScrollEnabled
           directionalLockEnabled
           scrollEventThrottle={16}
+          decelerationRate="fast"
+          snapToAlignment="start"
+          snapToInterval={104}
           keyboardShouldPersistTaps="always"
           style={styles.notebookOverviewList}
           contentContainerStyle={styles.notebookOverviewListContent}>
@@ -1042,10 +1273,15 @@ export default function NotesScreen() {
             keyboardDismissMode="none"
             scrollEnabled={shouldAllowEditorScroll}
             scrollEventThrottle={16}
-            showsVerticalScrollIndicator={shouldAllowEditorScroll}
+            showsVerticalScrollIndicator={shouldScrollEditor}
             onScroll={Animated.event(
               [{ nativeEvent: { contentOffset: { y: editorScrollY } } }],
-              { useNativeDriver: false }
+              {
+                useNativeDriver: false,
+                listener: (event: any) => {
+                  editorScrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+                },
+              }
             )}
             contentContainerStyle={[
               styles.editorScrollContent,
@@ -1056,11 +1292,9 @@ export default function NotesScreen() {
                 styles.editorScrollContentSurface,
                 {
                   minHeight: editorViewportHeight,
-                  height: editorScrollContentHeight,
+                  height: editorSurfaceHeight,
                 },
               ]}>
-              <NotebookLines />
-
               <TextInput
                 ref={editorInputRef}
                 multiline
@@ -1069,9 +1303,24 @@ export default function NotesScreen() {
                   setEditorContentHeight(event.nativeEvent.contentSize.height)
                 }
                 editable={isEditorArmed}
+                pointerEvents={isEditorArmed ? 'auto' : 'none'}
                 showSoftInputOnFocus={isEditorArmed}
                 value={body}
                 onChangeText={handleEditorBodyChange}
+                onSelectionChange={(event) => {
+                  const nextSelection =
+                    event.nativeEvent?.selection ?? editorSelectionRef.current ?? { start: 0, end: 0 };
+
+                  editorSelectionRef.current = nextSelection;
+
+                  if (isKeyboardVisible) {
+                    requestAnimationFrame(() => {
+                      keepCaretVisible(nextSelection, bodyRef.current, {
+                        animated: true,
+                      });
+                    });
+                  }
+                }}
                 onBlur={() => {
                   setIsEditorArmed(false);
                   setIsKeyboardVisible(false);
@@ -1087,7 +1336,7 @@ export default function NotesScreen() {
                   styles.editorInput,
                   {
                     minHeight: editorViewportHeight,
-                    height: editorScrollContentHeight,
+                    height: editorSurfaceHeight,
                     paddingBottom: editorBottomPadding,
                   },
                   !isEditorArmed && styles.editorInputUnarmed,
@@ -1147,49 +1396,124 @@ export default function NotesScreen() {
 
           <Pressable
             accessibilityRole="button"
-            onPress={saveAndStartNewNote}
+            onPress={saveCurrentNote}
             style={({ pressed }) => [styles.saveButton, pressed && styles.pressed]}>
             <CrayonFill tone="note" variant="tight" opacity={0.82} />
             <Text style={styles.saveButtonText}>Save note</Text>
           </Pressable>
         </View>
 
+        {saveStatusMessage ? (
+          <View pointerEvents="none" style={styles.saveStatusPill}>
+            <Text style={styles.saveStatusText}>{saveStatusMessage}</Text>
+          </View>
+        ) : null}
+
         <View style={styles.workspace}>
-          <View style={[styles.sidePanel, { width: sidePanelWidth }]}>
-            <View style={styles.sideHeader}>
-              <Text style={styles.sideTitle}>Saved</Text>
+          {isSavedPanelOpen ? (
+            <View style={[styles.sidePanel, { width: sidePanelWidth }]}>
+              <View style={styles.sideHeader}>
+                <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.82}
+                  style={styles.sideTitle}>
+                  Saved
+                </Text>
+
+                <View style={styles.sideHeaderControls}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={openBlankNote}
+                    style={({ pressed }) => [
+                      styles.newNoteButton,
+                      isEmptyNoteWarningVisible && styles.emptyNotePulseButton,
+                      pressed && styles.pressed,
+                    ]}>
+                    <Text
+                      style={[
+                        styles.newNoteButtonText,
+                        isEmptyNoteWarningVisible && styles.emptyNotePulseButtonText,
+                      ]}>
+                      New
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Close saved notes panel"
+                    onPress={closeSavedPanel}
+                    hitSlop={8}
+                    style={({ pressed }) => [styles.closeSavedPanelButton, pressed && styles.pressed]}>
+                    <Text style={styles.closeSavedPanelButtonText}>‹</Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              <Text style={styles.dragHint}>
+                {draggingNoteId ? 'Drop on note/notebook' : 'Hold + drag to group'}
+              </Text>
+
+              <ScrollView
+                nestedScrollEnabled
+                directionalLockEnabled
+                scrollEventThrottle={16}
+                decelerationRate="fast"
+                snapToAlignment="start"
+                snapToInterval={88}
+                showsVerticalScrollIndicator={notes.length > 5}
+                keyboardShouldPersistTaps="always"
+                contentContainerStyle={styles.noteList}>
+                {notebookGroups.map((group) => renderNotebookListItem(group))}
+
+                {looseNotes.map((note) => renderNoteListItem(note))}
+
+                {notes.length === 0 ? (
+                  <View style={styles.emptyNotesState}>
+                    <Text style={styles.emptyNotesText}>No saved notes yet.</Text>
+                  </View>
+                ) : null}
+              </ScrollView>
+            </View>
+          ) : (
+            <View style={styles.collapsedSavedRail}>
               <Pressable
                 accessibilityRole="button"
+                accessibilityLabel="Start a new note"
                 onPress={openBlankNote}
-                style={({ pressed }) => [styles.newNoteButton, pressed && styles.pressed]}>
-                <Text style={styles.newNoteButtonText}>New</Text>
+                style={({ pressed }) => [
+                  styles.collapsedNewNoteButton,
+                  isEmptyNoteWarningVisible && styles.emptyNotePulseButton,
+                  pressed && styles.pressed,
+                ]}>
+                <Text
+                  style={[
+                    styles.collapsedNewNoteButtonText,
+                    isEmptyNoteWarningVisible && styles.emptyNotePulseButtonText,
+                  ]}>
+                  +
+                </Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open saved notes panel"
+                onPress={openSavedPanel}
+                style={({ pressed }) => [styles.openSavedPanelTab, pressed && styles.pressed]}>
+                <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.82}
+                  style={styles.openSavedPanelTabText}>
+                  Saved
+                </Text>
               </Pressable>
             </View>
+          )}
 
-            <Text style={styles.dragHint}>
-              {draggingNoteId ? 'Drop on note/notebook' : 'Hold + drag to group'}
-            </Text>
-
-            <ScrollView
-              nestedScrollEnabled
-              directionalLockEnabled
-              scrollEventThrottle={16}
-              showsVerticalScrollIndicator={notes.length > 5}
-              keyboardShouldPersistTaps="always"
-              contentContainerStyle={styles.noteList}>
-              {notebookGroups.map((group) => renderNotebookListItem(group))}
-
-              {looseNotes.map((note) => renderNoteListItem(note))}
-
-              {notes.length === 0 ? (
-                <View style={styles.emptyNotesState}>
-                  <Text style={styles.emptyNotesText}>No saved notes yet.</Text>
-                </View>
-              ) : null}
-            </ScrollView>
+          <View style={[styles.editorShell, !isSavedPanelOpen && styles.editorShellWide]}>
+            {renderEditor()}
           </View>
-
-          <View style={styles.editorShell}>{renderEditor()}</View>
         </View>
       </View>
 
@@ -1271,6 +1595,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
   },
+  saveStatusPill: {
+    alignSelf: 'flex-end',
+    marginTop: -6,
+    marginRight: Platform.OS === 'android' ? 44 : 0,
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    backgroundColor: COLORS.noteSoft,
+    borderColor: COLORS.noteCrayon,
+    borderWidth: 1,
+  },
+  saveStatusText: {
+    color: COLORS.noteDeep,
+    fontSize: 12,
+    fontWeight: '900',
+  },
   workspace: {
     flex: 1,
     flexDirection: 'row',
@@ -1290,14 +1630,37 @@ const styles = StyleSheet.create({
   },
   sideHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: 6,
+    gap: 5,
+    minHeight: 74,
+  },
+  sideTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    minWidth: 0,
+    flexShrink: 1,
+  },
+  sideHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  sideHeaderControls: {
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 5,
+    flexShrink: 0,
   },
   sideTitle: {
+    flexShrink: 1,
+    minWidth: 0,
     color: COLORS.ink,
     fontSize: 15,
+    lineHeight: 19,
     fontWeight: '900',
+    includeFontPadding: false,
   },
   dragHint: {
     color: COLORS.muted,
@@ -1308,17 +1671,95 @@ const styles = StyleSheet.create({
   newNoteButton: {
     minHeight: 34,
     borderRadius: RADIUS.pill,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.noteSoft,
     borderColor: COLORS.noteCrayon,
     borderWidth: 1,
+    flexShrink: 0,
   },
   newNoteButtonText: {
     color: COLORS.noteDeep,
     fontSize: 12,
     fontWeight: '900',
+  },
+  closeSavedPanelButton: {
+    width: 38,
+    minHeight: 28,
+    borderRadius: RADIUS.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.noteSoft,
+    borderColor: COLORS.noteCrayon,
+    borderWidth: 1,
+    flexShrink: 0,
+    zIndex: 20,
+    elevation: 6,
+  },
+  closeSavedPanelButtonText: {
+    color: COLORS.noteDeep,
+    fontSize: 18,
+    lineHeight: 20,
+    fontWeight: '900',
+  },
+  collapsedSavedRail: {
+    width: 48,
+    alignItems: 'stretch',
+    gap: 8,
+  },
+  collapsedNewNoteButton: {
+    height: 42,
+    borderTopLeftRadius: RADIUS.lg,
+    borderBottomLeftRadius: RADIUS.sm,
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.noteSoft,
+    borderColor: COLORS.noteCrayon,
+    borderWidth: 1,
+    ...SHADOWS.soft,
+  },
+  collapsedNewNoteButtonText: {
+    color: COLORS.noteDeep,
+    fontSize: 24,
+    lineHeight: 26,
+    fontWeight: '900',
+  },
+  emptyNotePulseButton: {
+    backgroundColor: COLORS.dangerSoft,
+    borderColor: COLORS.dangerCrayon,
+    transform: [{ scale: 1.03 }],
+  },
+  emptyNotePulseButtonText: {
+    color: COLORS.danger,
+  },
+  openSavedPanelTab: {
+    flex: 1,
+    minHeight: 160,
+    borderTopLeftRadius: RADIUS.sm,
+    borderBottomLeftRadius: RADIUS.lg,
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.noteSoft,
+    borderColor: COLORS.noteCrayon,
+    borderWidth: 1,
+    ...SHADOWS.soft,
+  },
+  openSavedPanelTabText: {
+    width: 86,
+    color: COLORS.noteDeep,
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    transform: [{ rotate: '-90deg' }],
+    includeFontPadding: false,
   },
   noteList: {
     gap: SPACING.sm,
@@ -1474,6 +1915,10 @@ const styles = StyleSheet.create({
     padding: SPACING.sm,
     ...SHADOWS.card,
   },
+  editorShellWide: {
+    borderTopLeftRadius: 0,
+    borderBottomLeftRadius: 0,
+  },
   notebookPage: {
     flex: 1,
     position: 'relative',
@@ -1608,21 +2053,6 @@ const styles = StyleSheet.create({
     borderColor: COLORS.line,
     borderWidth: 1,
   },
-  notebookLines: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: NOTEBOOK_TOP_OFFSET + NOTEBOOK_LINE_COUNT * NOTEBOOK_LINE_HEIGHT,
-  },
-  notebookLine: {
-    position: 'absolute',
-    left: 20,
-    right: 18,
-    height: 1,
-    backgroundColor: COLORS.noteLine,
-    opacity: 0.78,
-  },
   editorScrollClip: {
     flex: 1,
     overflow: 'hidden',
@@ -1667,12 +2097,13 @@ const styles = StyleSheet.create({
     flex: 1,
     color: COLORS.ink,
     backgroundColor: 'transparent',
-    paddingTop: NOTEBOOK_TOP_OFFSET - 23,
+    paddingTop: NOTEBOOK_TEXT_TOP_PADDING,
     paddingLeft: 24,
     paddingRight: 54,
     fontSize: 17,
     lineHeight: NOTEBOOK_LINE_HEIGHT,
     fontWeight: '500',
+    includeFontPadding: false,
   },
   editorInputUnarmed: {
     color: COLORS.ink,

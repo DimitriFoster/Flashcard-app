@@ -33,9 +33,15 @@ export default function DeckReviewScreen() {
    * The array case can happen when a query param appears more than once.
    * Normalizing it up front keeps the rest of the screen simpler.
    */
-  const params = useLocalSearchParams<{ deckId?: string | string[]; mode?: string | string[] }>();
+  const params = useLocalSearchParams<{
+    deckId?: string | string[];
+    mode?: string | string[];
+    cardSearch?: string | string[];
+  }>();
   const deckId = Array.isArray(params.deckId) ? params.deckId[0] : params.deckId;
   const mode = Array.isArray(params.mode) ? params.mode[0] : params.mode;
+  const cardSearch = Array.isArray(params.cardSearch) ? params.cardSearch[0] : params.cardSearch;
+  const normalizedCardSearch = cardSearch?.trim().toLowerCase() ?? '';
   const isDueMode = mode === 'due';
 
   const [decks, setDecks] = useState<Deck[]>([]);
@@ -88,8 +94,21 @@ export default function DeckReviewScreen() {
     }
 
     const deckCards = getFlashcardsByDeck(deckId);
-    return isDueMode ? getReviewQueue(deckCards) : deckCards;
-  }, [deckId, isDueMode]);
+
+    if (isDueMode) {
+      return getReviewQueue(deckCards);
+    }
+
+    if (normalizedCardSearch) {
+      return deckCards.filter(
+        (card) =>
+          card.front.toLowerCase().includes(normalizedCardSearch) ||
+          card.back.toLowerCase().includes(normalizedCardSearch)
+      );
+    }
+
+    return deckCards;
+  }, [deckId, isDueMode, normalizedCardSearch]);
 
   /**
    * Refresh local state whenever this screen becomes active.
@@ -349,7 +368,15 @@ export default function DeckReviewScreen() {
       onStartEdit={handleStartEditing}
       onCancelEdit={handleCancelEditing}
       onSaveEdit={handleSaveEditing}
-      onBack={() => router.push(isDueMode ? '/review' : '/review/browse')}
+      onBack={() =>
+        router.push(
+          isDueMode
+            ? '/review'
+            : cardSearch
+              ? { pathname: '/review/browse', params: { q: cardSearch } }
+              : '/review/browse'
+        )
+      }
       onUndo={handleUndoReview}
       onGrade={handleGrade}
     />
