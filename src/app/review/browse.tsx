@@ -1,97 +1,161 @@
 /**
- * Browse decks review screen.
+ * Folio Browse Decks deck-selection page.
  *
- * This page uses the same deck-card format as the spaced repetition screen,
- * but it shows all cards in each deck and removes the spaced repetition note.
+ * This page is only the deck picker. The open-deck browse-card experience
+ * stays in /review/[deckId].tsx.
  */
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Image,
+  ImageBackground,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+  type ImageSourcePropType,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { PreviewPanel } from '@/components/review/preview-panel';
-import { CrayonFill } from '@/components/ui/crayon-fill';
-import { COLORS, RADIUS, SPACING } from '@/constants/design';
+import { FOLIO_HAND_FONT } from '@/folio-review/folioFonts';
+import { folioReviewAssets } from '@/folio-review/folioReviewAssets';
 import { getDecks, getFlashcards } from '@/storage/flashcards';
 import type { Deck, Flashcard } from '@/types/flashcard';
 
-/**
- * Returns the newest card by createdAt.
- * Copying the array prevents sort() from mutating React state.
- */
-function getMostRecentCard(cards: Flashcard[]) {
-  return [...cards].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+const browseDeckAssets = {
+  heroPanel: require('../../../assets/folio-ui/browse-selection/panels/browse_hero_panel_round44_crop_top.png'),
+  reviewDueCardsButton: require('../../../assets/folio-ui/browse-selection/header/review_due_cards_button_round22_padded.png'),
+  openDeckButton: require('../../../assets/folio-ui/browse-selection/cards/open_deck_button_mockup_round22.png'),
+  previewCollapsedPanels: [
+    require('../../../assets/folio-ui/browse-selection/panels/preview_cards_collapsed_panel_blue_round22.png'),
+    require('../../../assets/folio-ui/browse-selection/panels/preview_cards_collapsed_panel_green_round22.png'),
+    require('../../../assets/folio-ui/browse-selection/panels/preview_cards_collapsed_panel_yellow_round22.png'),
+    require('../../../assets/folio-ui/browse-selection/panels/preview_cards_collapsed_panel_peach_round22.png'),
+    require('../../../assets/folio-ui/browse-selection/panels/preview_cards_collapsed_panel_purple_round22.png'),
+    require('../../../assets/folio-ui/browse-selection/panels/preview_cards_collapsed_panel_mint_round22.png'),
+  ],
+  crayonTextures: [
+    require('../../../assets/folio-ui/browse-selection/textures/transparent-round43/crayon_texture_blue_transparent_round43.png'),
+    require('../../../assets/folio-ui/browse-selection/textures/transparent-round43/crayon_texture_green_transparent_round43.png'),
+    require('../../../assets/folio-ui/browse-selection/textures/transparent-round43/crayon_texture_yellow_transparent_round43.png'),
+    require('../../../assets/folio-ui/browse-selection/textures/transparent-round43/crayon_texture_peach_transparent_round43.png'),
+    require('../../../assets/folio-ui/browse-selection/textures/transparent-round43/crayon_texture_purple_transparent_round43.png'),
+    require('../../../assets/folio-ui/browse-selection/textures/transparent-round43/crayon_texture_mint_transparent_round43.png'),
+  ],
+  selectedDeckShells: [
+    require('../../../assets/folio-ui/browse-selection/cards/swatch-shells-round32/deck_card_selected_blue_swatch_shell_round32.png'),
+    require('../../../assets/folio-ui/browse-selection/cards/swatch-shells-round32/deck_card_selected_green_swatch_shell_round32.png'),
+    require('../../../assets/folio-ui/browse-selection/cards/swatch-shells-round32/deck_card_selected_yellow_swatch_shell_round32.png'),
+    require('../../../assets/folio-ui/browse-selection/cards/swatch-shells-round32/deck_card_selected_peach_swatch_shell_round32.png'),
+    require('../../../assets/folio-ui/browse-selection/cards/swatch-shells-round32/deck_card_selected_purple_swatch_shell_round32.png'),
+    require('../../../assets/folio-ui/browse-selection/cards/swatch-shells-round32/deck_card_selected_mint_swatch_shell_round32.png'),
+  ],
+  sideDeckShells: [
+    require('../../../assets/folio-ui/browse-selection/cards/swatch-shells-round32/deck_card_side_blue_swatch_shell_round32.png'),
+    require('../../../assets/folio-ui/browse-selection/cards/swatch-shells-round32/deck_card_side_green_swatch_shell_round32.png'),
+    require('../../../assets/folio-ui/browse-selection/cards/swatch-shells-round32/deck_card_side_yellow_swatch_shell_round32.png'),
+    require('../../../assets/folio-ui/browse-selection/cards/swatch-shells-round32/deck_card_side_peach_swatch_shell_round32.png'),
+    require('../../../assets/folio-ui/browse-selection/cards/swatch-shells-round32/deck_card_side_purple_swatch_shell_round32.png'),
+    require('../../../assets/folio-ui/browse-selection/cards/swatch-shells-round32/deck_card_side_mint_swatch_shell_round32.png'),
+  ],
+  topicIcons: {
+    ai: require('../../../assets/folio-ui/topic-icons/starter-transparent/ai_brain_cloud.png'),
+    python: require('../../../assets/folio-ui/topic-icons/starter-transparent/python_snakes.png'),
+    language: require('../../../assets/folio-ui/topic-icons/starter-transparent/spanish_hola.png'),
+    writing: require('../../../assets/folio-ui/topic-icons/starter-transparent/writing_notebook_pencil.png'),
+    music: require('../../../assets/folio-ui/topic-icons/starter-transparent/music_notes.png'),
+    science: require('../../../assets/folio-ui/topic-icons/starter-transparent/science_flask.png'),
+    geography: require('../../../assets/folio-ui/topic-icons/starter-transparent/geography_earth_pin.png'),
+    math: require('../../../assets/folio-ui/topic-icons/starter-transparent/math_notepad.png'),
+    general: require('../../../assets/folio-ui/topic-icons/starter-transparent/writing_notebook_pencil.png'),
+  },
+} as const;
+
+const previewPanelFillColors = ['#EAF4FF', '#EEF7E4', '#FFF6CC', '#FBE6DE', '#EFE6FA', '#E6F5ED'] as const;
+
+type DeckTopic = keyof typeof browseDeckAssets.topicIcons;
+
+function inferDeckTopic(deckName: string, sampleText = ''): DeckTopic {
+  const text = `${deckName} ${sampleText}`.toLowerCase();
+
+  if (/\b(ai|llm|rag|embedding|embeddings|token|model|neural|machine learning|architecture)\b/.test(text)) return 'ai';
+  if (/\b(python|django|flask|pandas|numpy|operator|operators|script|typescript|javascript|react|code|coding)\b/.test(text)) return 'python';
+  if (/\b(spanish|language|phrases|vocab|vocabulary|grammar|hola|translate|translation)\b/.test(text)) return 'language';
+  if (/\b(write|writing|notes|essay|journal|composition|pen|notebook)\b/.test(text)) return 'writing';
+  if (/\b(music|song|chord|scale|guitar|piano|melody|rhythm)\b/.test(text)) return 'music';
+  if (/\b(science|chemistry|biology|lab|flask|experiment|physics)\b/.test(text)) return 'science';
+  if (/\b(geography|map|country|earth|location|travel|world)\b/.test(text)) return 'geography';
+  if (/\b(math|algebra|calculus|geometry|equation|statistics|stats)\b/.test(text)) return 'math';
+
+  return 'general';
+}
+
+function getDeckTopicIcon(deck: Deck, sampleCards: Flashcard[]): ImageSourcePropType {
+  const sampleText = sampleCards.slice(0, 4).map((card) => `${card.front} ${card.back}`).join(' ');
+  return browseDeckAssets.topicIcons[inferDeckTopic(deck.name, sampleText)];
+}
+
+type DeckPreview = {
+  deck: Deck;
+  allCards: Flashcard[];
+  cards: Flashcard[];
+  dueCount: number;
+  cardSearchQuery?: string;
+};
+
+function normalizeParam(value?: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function getCardsForDeck(deckId: string, cards: Flashcard[]) {
   return cards.filter((card) => card.deckId === deckId);
 }
 
-type DeckPreview = {
-  deck: Deck;
-  cards: Flashcard[];
-  mostRecentCard?: Flashcard;
-  cardSearchQuery?: string;
-};
+function isCardDue(card: Flashcard) {
+  if (card.state === 'suspended') return false;
+  if (!card.dueAt) return true;
+  const dueTime = Date.parse(card.dueAt);
+  return Number.isNaN(dueTime) || dueTime <= Date.now();
+}
+
+function truncate(text: string, maxLength: number) {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  if (clean.length <= maxLength) return clean;
+  return `${clean.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function scoreDeck(deck: Deck) {
+  const name = deck.name.toLowerCase();
+  if (name.includes('spanish')) return 0;
+  if (name.includes('ai systems')) return 1;
+  if (name.includes('python')) return 2;
+  return 10;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(value, max));
+}
 
 export default function BrowseDecksScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ q?: string | string[] }>();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  const carouselRef = useRef<ScrollView | null>(null);
+  const initializedSelectionRef = useRef(false);
 
-  const routeSearchQuery = Array.isArray(params.q) ? params.q[0] : params.q;
+  const routeSearchQuery = normalizeParam(params.q);
 
   const [decks, setDecks] = useState<Deck[]>([]);
   const [cards, setCards] = useState<Flashcard[]>([]);
   const [searchQuery, setSearchQuery] = useState(routeSearchQuery ?? '');
-
-  const panelWidth = Math.min(Math.max(width - SPACING.lg * 2, 300), 430);
-
-  const trimmedSearchQuery = searchQuery.trim();
-  const normalizedSearchQuery = trimmedSearchQuery.toLowerCase();
-
-  const deckPreviews = useMemo<DeckPreview[]>(
-    () =>
-      decks
-        .map((deck) => {
-          const deckCards = getCardsForDeck(deck.id, cards);
-          const matchingCards = normalizedSearchQuery
-            ? deckCards.filter(
-                (card) =>
-                  card.front.toLowerCase().includes(normalizedSearchQuery) ||
-                  card.back.toLowerCase().includes(normalizedSearchQuery)
-              )
-            : deckCards;
-          const deckMatches = normalizedSearchQuery
-            ? deck.name.toLowerCase().includes(normalizedSearchQuery)
-            : true;
-
-          /**
-           * Search has two useful meanings:
-           * - If card text matches, preview and open only those matching cards.
-           * - If only the deck name matches, keep the whole deck available.
-           */
-          const cardSearchQuery =
-            normalizedSearchQuery && matchingCards.length > 0 ? trimmedSearchQuery : undefined;
-          const visibleCards = cardSearchQuery ? matchingCards : deckMatches ? deckCards : matchingCards;
-
-          return {
-            deck,
-            cards: visibleCards,
-            mostRecentCard: getMostRecentCard(visibleCards),
-            cardSearchQuery,
-          };
-        })
-        .filter(
-          (preview) =>
-            !normalizedSearchQuery ||
-            preview.cards.length > 0 ||
-            preview.deck.name.toLowerCase().includes(normalizedSearchQuery)
-        ),
-    [cards, decks, normalizedSearchQuery, trimmedSearchQuery]
-  );
+  const [selectedIndex, setSelectedIndex] = useState(1);
+  const [previewExpanded, setPreviewExpanded] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -106,233 +170,667 @@ export default function BrowseDecksScreen() {
     }
   }, [routeSearchQuery]);
 
-  /**
-   * Browse mode opens the full deck. It does not filter out cards scheduled
-   * for later, which makes it useful for checking/editing the shape of a deck.
-   */
-  function openDeck(deckId: string | undefined, cardSearchQuery?: string) {
-    if (!deckId) {
+  const trimmedSearchQuery = searchQuery.trim();
+  const normalizedSearchQuery = trimmedSearchQuery.toLowerCase();
+
+  const deckPreviews = useMemo<DeckPreview[]>(() => {
+    const next = decks
+      .map((deck) => {
+        const allCards = getCardsForDeck(deck.id, cards);
+        const matchingCards = normalizedSearchQuery
+          ? allCards.filter((card) =>
+              `${card.front} ${card.back}`.toLowerCase().includes(normalizedSearchQuery)
+            )
+          : allCards;
+        const deckMatches = normalizedSearchQuery
+          ? deck.name.toLowerCase().includes(normalizedSearchQuery)
+          : true;
+        const cardSearchQuery =
+          normalizedSearchQuery && matchingCards.length > 0 ? trimmedSearchQuery : undefined;
+        const visibleCards = cardSearchQuery ? matchingCards : deckMatches ? allCards : matchingCards;
+
+        return {
+          deck,
+          allCards,
+          cards: visibleCards,
+          dueCount: allCards.filter(isCardDue).length,
+          cardSearchQuery,
+        };
+      })
+      .filter((preview) =>
+        !normalizedSearchQuery ||
+        preview.cards.length > 0 ||
+        preview.deck.name.toLowerCase().includes(normalizedSearchQuery)
+      );
+
+    return next.sort((a, b) => scoreDeck(a.deck) - scoreDeck(b.deck));
+  }, [cards, decks, normalizedSearchQuery, trimmedSearchQuery]);
+
+  const preferredIndex = useMemo(() => {
+    const aiIndex = deckPreviews.findIndex((preview) =>
+      preview.deck.name.toLowerCase().includes('ai systems')
+    );
+    if (aiIndex >= 0) return aiIndex;
+    return Math.min(1, Math.max(0, deckPreviews.length - 1));
+  }, [deckPreviews]);
+
+  useEffect(() => {
+    if (deckPreviews.length === 0) {
+      setSelectedIndex(0);
       return;
     }
 
+    setSelectedIndex((current) => {
+      if (!initializedSelectionRef.current) {
+        initializedSelectionRef.current = true;
+        return preferredIndex;
+      }
+      return clamp(current, 0, deckPreviews.length - 1);
+    });
+  }, [deckPreviews.length, preferredIndex]);
+
+  useEffect(() => {
+    if (normalizedSearchQuery) {
+      setSelectedIndex(0);
+    }
+  }, [normalizedSearchQuery]);
+
+  const selectedPreview = deckPreviews[selectedIndex] ?? deckPreviews[0];
+  const selectedCards = selectedPreview?.cards ?? [];
+  const selectedPreviewFill =
+    previewPanelFillColors[selectedIndex % previewPanelFillColors.length] ?? previewPanelFillColors[0];
+  const selectedCrayonTexture =
+    browseDeckAssets.crayonTextures[selectedIndex % browseDeckAssets.crayonTextures.length] ??
+    browseDeckAssets.crayonTextures[0];
+
+  const contentWidth = Math.min(width - 32, 430);
+  const usableHeight = Math.max(680, height - insets.top - insets.bottom);
+  const compactScale = Math.min(1, usableHeight / 830);
+  const headerHeight = 72;
+  const heroHeight = Math.round(contentWidth * 0.38 * compactScale);
+  const carouselScale = 1.5625;
+  const carouselItemWidth = Math.round(contentWidth * 0.34 * carouselScale);
+  const selectedDeckWidth = Math.round(carouselItemWidth * 1.16);
+  const selectedDeckHeight = Math.round(selectedDeckWidth * 1.25 * compactScale);
+  const sideDeckWidth = Math.round(carouselItemWidth * 0.84);
+  const sideDeckHeight = Math.round(sideDeckWidth * 1.48 * compactScale);
+  const previewWindowHeight = Math.round(Math.min(210, Math.max(168, usableHeight * 0.22)));
+  const previewRowHeight = Math.max(58, Math.round(64 * compactScale));
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      carouselRef.current?.scrollTo({ x: selectedIndex * carouselItemWidth, animated: true });
+    }, 40);
+    return () => clearTimeout(timer);
+  }, [carouselItemWidth, selectedIndex]);
+
+  function openDeck(preview?: DeckPreview) {
+    if (!preview || preview.cards.length === 0) return;
     router.push({
       pathname: '/review/[deckId]',
-      params: cardSearchQuery
-        ? { deckId, cardSearch: cardSearchQuery }
-        : { deckId },
+      params: {
+        deckId: preview.deck.id,
+        ...(preview.cardSearchQuery ? { cardSearch: preview.cardSearchQuery } : {}),
+        ...(trimmedSearchQuery ? { browseSearchLabel: trimmedSearchQuery } : {}),
+      },
     });
   }
 
+  function selectDeck(index: number) {
+    setSelectedIndex(clamp(index, 0, deckPreviews.length - 1));
+  }
+
   return (
-    <ScrollView
-      style={styles.screen}
-      directionalLockEnabled
-      decelerationRate="fast"
-      contentContainerStyle={[
-        styles.content,
-        {
-          paddingTop: insets.top + 22,
-          paddingBottom: insets.bottom + 110,
-        },
-      ]}>
-      <View style={styles.header}>
-        <Text style={styles.eyebrow}>Browse decks</Text>
-        <Text style={styles.title}>Open any deck.</Text>
-        <Text style={styles.subtitle}>
-          Browse mode shows every deck, even when cards are not due yet.
-        </Text>
+    <ImageBackground source={folioReviewAssets.background.pagePaper} resizeMode="cover" style={styles.screen}>
+      <SafeAreaView style={styles.safeArea}>
+        <View
+          style={[
+            styles.page,
+            {
+              paddingTop: 0,
+              paddingBottom: Math.max(8, insets.bottom + 4),
+            },
+          ]}
+        >
+          <View style={[styles.headerRow, { height: headerHeight, width: contentWidth }]}> 
+            <View pointerEvents="none" style={styles.wordmarkCenter}>
+              <Image source={folioReviewAssets.header.folioWordmark} resizeMode="contain" style={styles.folioWordmark} />
+            </View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.push('/review')} style={styles.backPressable}>
+              <Image source={folioReviewAssets.header.back} resizeMode="contain" style={styles.backButton} />
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Review due cards" onPress={() => router.push('/review')} style={styles.reviewDuePressable}>
+              <Image source={browseDeckAssets.reviewDueCardsButton} resizeMode="contain" style={styles.reviewDueImage} />
+            </Pressable>
+          </View>
 
-        <View style={styles.headerActionRow}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push('/')}
-            style={({ pressed }) => [styles.createButton, pressed && styles.pressed]}>
-            <CrayonFill tone="create" variant="tight" opacity={0.78} />
-            <Text style={styles.createButtonText}>Create cards</Text>
-          </Pressable>
+          <ImageBackground
+            source={browseDeckAssets.heroPanel}
+            resizeMode="stretch"
+            style={[styles.heroPanel, { height: heroHeight, width: contentWidth }]}
+          >
+            <TextInput
+              accessibilityLabel="Search decks or cards"
+              autoCapitalize="none"
+              autoCorrect={false}
+              onChangeText={setSearchQuery}
+              placeholder=""
+              style={[styles.searchInput, searchQuery ? styles.searchInputFilled : null]}
+              value={searchQuery}
+            />
+          </ImageBackground>
 
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push('/review')}
-            style={({ pressed }) => [styles.reviewButton, pressed && styles.pressed]}>
-            <CrayonFill tone="review" variant="tight" opacity={0.78} />
-            <Text style={styles.reviewButtonText}>Review due cards</Text>
-          </Pressable>
+          {selectedPreview ? (
+            <>
+              <ScrollView
+                ref={carouselRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                decelerationRate="fast"
+                snapToInterval={carouselItemWidth}
+                disableIntervalMomentum
+                contentContainerStyle={[
+                  styles.carouselContent,
+                  { paddingHorizontal: Math.max(0, (contentWidth - carouselItemWidth) / 2) },
+                ]}
+                onMomentumScrollEnd={(event) => {
+                  const nextIndex = Math.round(event.nativeEvent.contentOffset.x / carouselItemWidth);
+                  selectDeck(nextIndex);
+                }}
+                style={[styles.carouselWindow, { width: contentWidth }]}
+              >
+                {deckPreviews.map((preview, index) => {
+                  const active = index === selectedIndex;
+                  const shell = active
+                    ? browseDeckAssets.selectedDeckShells[index % browseDeckAssets.selectedDeckShells.length]
+                    : browseDeckAssets.sideDeckShells[index % browseDeckAssets.sideDeckShells.length];
+                  const cardWidth = active ? selectedDeckWidth : sideDeckWidth;
+                  const cardHeight = active ? selectedDeckHeight : sideDeckHeight;
+                  const cardCount = preview.allCards.length;
+                  const cardLabel = cardCount === 1 ? 'card' : 'cards';
+
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={active ? `Open ${preview.deck.name}` : `Select ${preview.deck.name}`}
+                      key={preview.deck.id}
+                      onPress={() => {
+                        if (active) {
+                          openDeck(preview);
+                          return;
+                        }
+                        selectDeck(index);
+                      }}
+                      style={({ pressed }) => [
+                        styles.deckCarouselItem,
+                        { height: selectedDeckHeight + 14, width: carouselItemWidth },
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <ImageBackground
+                        source={shell}
+                        resizeMode="stretch"
+                        style={[
+                          styles.deckCard,
+                          {
+                            height: cardHeight,
+                            marginTop: active ? 0 : Math.round((selectedDeckHeight - sideDeckHeight) * 0.45),
+                            width: cardWidth,
+                          },
+                        ]}
+                      >
+                        <Text allowFontScaling={false} numberOfLines={active ? 3 : 3} style={[styles.deckTitle, active ? styles.selectedDeckTitle : styles.sideDeckTitle]}>
+                          {preview.deck.name}
+                        </Text>
+                        <Image
+                          source={getDeckTopicIcon(preview.deck, preview.allCards)}
+                          resizeMode="contain"
+                          style={active ? styles.selectedTopicIcon : styles.sideTopicIcon}
+                        />
+                        <View style={[styles.deckCountBlock, active ? styles.selectedDeckCountBlock : null]}>
+                          <Text allowFontScaling={false} numberOfLines={1} style={styles.deckDueText}>{preview.dueCount} due now</Text>
+                          <Text allowFontScaling={false} numberOfLines={1} style={styles.deckTotalText}>{cardCount} total {cardLabel}</Text>
+                        </View>
+
+                      </ImageBackground>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+
+              <View style={styles.dotsRow}>
+                {deckPreviews.slice(0, Math.min(deckPreviews.length, 5)).map((preview, index) => (
+                  <View key={preview.deck.id} style={[styles.dot, index === selectedIndex ? styles.activeDot : null]} />
+                ))}
+              </View>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={previewExpanded ? 'Hide card previews' : 'Show card previews'}
+                onPress={() => setPreviewExpanded((value) => !value)}
+                style={({ pressed }) => [styles.previewHeader, { width: contentWidth, backgroundColor: selectedPreviewFill }, pressed && styles.pressed]}
+              >
+                <Image pointerEvents="none" source={selectedCrayonTexture} resizeMode="stretch" style={styles.previewSwatchFill} />
+                <View style={styles.previewHeaderPanel}>
+                  <View style={styles.previewHeaderLeft}>
+                    <Image source={folioReviewAssets.bottomNav.reviewIconInactive} resizeMode="contain" style={styles.previewCardsIcon} />
+                    <Text allowFontScaling={false} numberOfLines={1} style={styles.previewHeaderText}>
+                      Preview cards from{' '}
+                      <Text style={styles.previewDeckName}>{selectedPreview.deck.name}</Text>
+                    </Text>
+                  </View>
+                  <Text allowFontScaling={false} style={styles.previewToggleGlyph}>{previewExpanded ? '⌃' : '⌄'}</Text>
+                </View>
+              </Pressable>
+
+              {previewExpanded ? (
+                <ImageBackground
+                  source={selectedCrayonTexture}
+                  resizeMode="stretch"
+                  style={[styles.previewWindow, { height: previewWindowHeight, width: contentWidth }]}
+                  imageStyle={styles.previewWindowTextureImage}
+                >
+                  <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false} style={styles.previewScroll} contentContainerStyle={styles.previewList}>
+                    {selectedCards.length > 0 ? (
+                      selectedCards.slice(0, 30).map((card) => (
+                        <Pressable
+                          accessibilityRole="button"
+                          key={card.id}
+                          onPress={() => openDeck(selectedPreview)}
+                          style={({ pressed }) => [styles.previewRow, { minHeight: previewRowHeight }, pressed && styles.pressed]}
+                        >
+                          <Image source={folioReviewAssets.card.favoriteStar} resizeMode="contain" style={styles.previewStar} />
+                          <View style={styles.previewQuestionColumn}>
+                            <Text allowFontScaling={false} numberOfLines={2} style={styles.previewQuestionText}>
+                              {truncate(card.front, 64)}
+                            </Text>
+                          </View>
+                          <View style={styles.previewDivider} />
+                          <View style={styles.previewAnswerColumn}>
+                            <Text allowFontScaling={false} numberOfLines={3} style={styles.previewAnswerText}>
+                              {truncate(card.back, 86)}
+                            </Text>
+                          </View>
+                          <Text allowFontScaling={false} style={styles.chevron}>›</Text>
+                        </Pressable>
+                      ))
+                    ) : (
+                      <View style={styles.emptyPreviewRow}>
+                        <Text style={styles.emptyPreviewText}>No cards in this deck yet.</Text>
+                      </View>
+                    )}
+                  </ScrollView>
+                </ImageBackground>
+              ) : null}
+            </>
+          ) : (
+            <View style={[styles.emptyState, { width: contentWidth }]}> 
+              <Text style={styles.emptyTitle}>No decks yet</Text>
+              <Text style={styles.emptyText}>Create a deck first, then it will appear here.</Text>
+            </View>
+          )}
+
         </View>
-
-        <TextInput
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Search decks, prompts, or answers"
-          placeholderTextColor={COLORS.muted}
-          style={styles.searchInput}
-        />
-      </View>
-
-      {deckPreviews.length > 0 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          decelerationRate="fast"
-          disableIntervalMomentum
-          snapToAlignment="start"
-          snapToInterval={panelWidth + SPACING.md}
-          contentContainerStyle={styles.deckCarousel}>
-          {deckPreviews.map((item) => {
-            const isCardSearch = Boolean(item.cardSearchQuery);
-            const cardWord = item.cards.length === 1 ? 'card' : 'cards';
-
-            return (
-              <PreviewPanel
-                key={item.deck.id}
-                title={item.deck.name}
-                helper={
-                  isCardSearch
-                    ? `${item.cards.length} matching ${cardWord} in this deck.`
-                    : `${item.cards.length} ${cardWord} in this deck.`
-                }
-                card={item.mostRecentCard}
-                deck={item.deck}
-                emptyText="Add cards to this deck from the Create section, then come back here to review."
-                deckId={item.cards.length > 0 ? item.deck.id : undefined}
-                buttonLabel={
-                  item.cards.length > 0
-                    ? isCardSearch
-                      ? 'Open matching cards'
-                      : 'Review this deck'
-                    : 'No cards yet'
-                }
-                onOpenDeck={() =>
-                  openDeck(item.cards.length > 0 ? item.deck.id : undefined, item.cardSearchQuery)
-                }
-                style={{ width: panelWidth }}
-              />
-            );
-          })}
-        </ScrollView>
-      ) : (
-        <View style={styles.emptyDeckState}>
-          <Text style={styles.emptyDeckTitle}>{searchQuery ? 'No matches' : 'No decks yet'}</Text>
-          <Text style={styles.emptyDeckText}>
-            {searchQuery
-              ? 'Try searching for a different deck, prompt, or answer.'
-              : 'Create a deck first, then it will appear here as a browse block.'}
-          </Text>
-        </View>
-      )}
-    </ScrollView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: COLORS.background,
   },
-  content: {
-    paddingHorizontal: SPACING.lg,
-    gap: SPACING.md,
+  safeArea: {
+    flex: 1,
+    paddingTop: 30,
   },
-  header: {
-    gap: 8,
-    maxWidth: 820,
+  page: {
+    alignItems: 'center',
+    flex: 1,
+    width: '100%',
   },
-  eyebrow: {
-    color: COLORS.reviewDeep,
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  title: {
-    color: COLORS.ink,
-    fontSize: 32,
-    lineHeight: 38,
-    fontWeight: '800',
-  },
-  subtitle: {
-    color: COLORS.muted,
-    fontSize: 16,
-    lineHeight: 23,
-  },
-  headerActionRow: {
+  headerRow: {
+    alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: SPACING.sm,
-    paddingTop: 4,
-  },
-  createButton: {
+    marginBottom: 8,
+    overflow: 'visible',
     position: 'relative',
-    overflow: 'hidden',
-    flex: 1,
-    minHeight: 44,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: 16,
-    alignItems: 'center',
+  },
+  backPressable: {
+    height: 58,
     justifyContent: 'center',
-    backgroundColor: COLORS.createSoft,
-    borderColor: COLORS.createCrayon,
-    borderWidth: 1,
+    width: 58,
+    zIndex: 3,
   },
-  createButtonText: {
-    color: COLORS.createDeep,
-    fontSize: 15,
-    fontWeight: '800',
+  backButton: {
+    height: 58,
+    width: 58,
   },
-  reviewButton: {
-    position: 'relative',
-    overflow: 'hidden',
-    flex: 1,
-    minHeight: 44,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: 16,
+  wordmarkCenter: {
     alignItems: 'center',
+    bottom: 0,
     justifyContent: 'center',
-    backgroundColor: COLORS.reviewSoft,
-    borderColor: COLORS.reviewCrayon,
-    borderWidth: 1,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 1,
   },
-  reviewButtonText: {
-    color: COLORS.reviewDeep,
-    fontSize: 15,
-    fontWeight: '800',
+  folioWordmark: {
+    height: 62,
+    width: 132,
+  },
+  reviewDuePressable: {
+    alignItems: 'center',
+    height: 64,
+    justifyContent: 'center',
+    overflow: 'visible',
+    position: 'absolute',
+    right: -26,
+    width: 146,
+    zIndex: 3,
+  },
+  reviewDueImage: {
+    height: 62,
+    overflow: 'visible',
+    width: 146,
+  },
+  heroPanel: {
+    marginBottom: 8,
   },
   searchInput: {
-    color: COLORS.ink,
-    backgroundColor: COLORS.panel,
-    borderColor: COLORS.reviewCrayon,
-    borderWidth: 1,
-    borderRadius: RADIUS.md,
+    backgroundColor: 'transparent',
+    borderRadius: 18,
+    bottom: '13%',
+    color: '#645F58',
+    fontFamily: FOLIO_HAND_FONT,
+    fontSize: 18,
+    left: '14%',
+    paddingHorizontal: 18,
+    paddingVertical: 0,
+    position: 'absolute',
+    right: '6%',
+    top: '64%',
+  },
+  searchInputFilled: {
+    backgroundColor: '#FBF6EA',
+  },
+  carouselWindow: {
+    flexGrow: 0,
+    marginBottom: 1,
+    overflow: 'visible',
+  },
+  carouselContent: {
+    alignItems: 'flex-start',
+  },
+  deckCarouselItem: {
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    overflow: 'visible',
+  },
+  deckCard: {
+    alignItems: 'center',
+    borderRadius: 24,
+    overflow: 'hidden',
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    fontWeight: '700',
+    paddingTop: 17,
   },
-  deckCarousel: {
-    gap: SPACING.md,
-    paddingRight: SPACING.lg,
-    paddingVertical: 4,
+  deckTitle: {
+    color: '#211D19',
+    fontFamily: FOLIO_HAND_FONT,
+    textAlign: 'center',
+    zIndex: 1,
   },
-  emptyDeckState: {
-    backgroundColor: COLORS.panel,
-    borderColor: COLORS.line,
+  selectedDeckTitle: {
+    fontSize: 18,
+    lineHeight: 23,
+    minHeight: 64,
+  },
+  sideDeckTitle: {
+    fontSize: 14,
+    lineHeight: 18,
+    minHeight: 50,
+  },
+  selectedTopicIcon: {
+    height: 72,
+    marginBottom: 4,
+    marginTop: 6,
+    width: 82,
+    zIndex: 1,
+  },
+  sideTopicIcon: {
+    height: 50,
+    marginBottom: 4,
+    marginTop: 4,
+    width: 58,
+    zIndex: 1,
+  },
+  deckCountBlock: {
+    alignItems: 'center',
+    marginTop: 'auto',
+    paddingBottom: 22,
+    zIndex: 1,
+  },
+  selectedDeckCountBlock: {
+    paddingBottom: 24,
+  },
+  deckDueText: {
+    color: '#0D75D9',
+    fontFamily: FOLIO_HAND_FONT,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  deckTotalText: {
+    color: '#6D665D',
+    fontFamily: FOLIO_HAND_FONT,
+    fontSize: 10.5,
+    lineHeight: 14,
+  },
+  openDeckButton: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    borderColor: '#3C86E7',
+    borderRadius: 8,
+    borderWidth: 1.4,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'absolute',
+    zIndex: 2,
+  },
+  openDeckButtonTexture: {
+    alignItems: 'center',
+    height: '100%',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  openDeckButtonText: {
+    color: '#2675D7',
+    fontFamily: FOLIO_HAND_FONT,
+    fontSize: 10.5,
+    lineHeight: 13,
+  },
+  dotsRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  dot: {
+    backgroundColor: '#BFB6A7',
+    borderRadius: 999,
+    height: 8,
+    width: 8,
+  },
+  activeDot: {
+    backgroundColor: '#2E86E6',
+    height: 11,
+    width: 11,
+  },
+  previewHeader: {
+    borderRadius: 18,
+    marginBottom: 6,
+    minHeight: 62,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  previewSwatchFill: {
+    ...StyleSheet.absoluteFillObject,
+    height: '100%',
+    width: '100%',
+    zIndex: 0,
+  },
+  previewHeaderPanel: {
+    alignItems: 'center',
+    borderColor: '#D8C8A9',
+    borderRadius: 18,
     borderWidth: 1,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.lg,
-    gap: 8,
+    flexDirection: 'row',
+    height: 62,
+    justifyContent: 'flex-start',
+    overflow: 'hidden',
+    paddingHorizontal: 18,
+    paddingRight: 18,
+    position: 'relative',
+    width: '100%',
+    zIndex: 1,
   },
-  emptyDeckTitle: {
-    color: COLORS.ink,
+  previewHeaderLeft: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    marginRight: 34,
+    minWidth: 0,
+  },
+  previewCardsIcon: {
+    height: 24,
+    marginRight: 8,
+    width: 24,
+  },
+  previewHeaderText: {
+    color: '#655E55',
+    flex: 1,
+    flexShrink: 1,
+    fontFamily: FOLIO_HAND_FONT,
+    fontSize: 13.5,
+    lineHeight: 18,
+    minWidth: 0,
+  },
+  previewDeckName: {
+    color: '#0D75D9',
+  },
+  previewToggleGlyph: {
+    color: '#0D75D9',
+    fontFamily: FOLIO_HAND_FONT,
     fontSize: 22,
-    fontWeight: '800',
+    lineHeight: 26,
+    minWidth: 22,
+    position: 'absolute',
+    right: 14,
+    textAlign: 'center',
+    top: 18,
   },
-  emptyDeckText: {
-    color: COLORS.muted,
+  previewWindow: {
+    borderColor: '#D8C8A9',
+    borderRadius: 18,
+    borderWidth: 1,
+    marginTop: 2,
+    overflow: 'hidden',
+    padding: 6,
+    position: 'relative',
+  },
+  previewWindowTextureImage: {
+    borderRadius: 18,
+  },
+  previewScroll: {
+    zIndex: 1,
+  },
+  previewList: {
+    gap: 5,
+    paddingBottom: 2,
+  },
+  previewRow: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 252, 244, 0.62)',
+    borderColor: 'rgba(199, 181, 145, 0.72)',
+    borderRadius: 15,
+    borderWidth: 1.1,
+    flexDirection: 'row',
+    paddingHorizontal: 9,
+  },
+  previewStar: {
+    height: 21,
+    marginRight: 8,
+    width: 21,
+  },
+  previewQuestionColumn: {
+    flex: 1.05,
+    paddingRight: 10,
+  },
+  previewDivider: {
+    alignSelf: 'stretch',
+    backgroundColor: '#E1D8CA',
+    marginRight: 10,
+    width: 1,
+  },
+  previewAnswerColumn: {
+    flex: 1.1,
+    paddingRight: 7,
+  },
+  previewQuestionText: {
+    color: '#27211C',
+    fontFamily: FOLIO_HAND_FONT,
+    fontSize: 13.2,
+    lineHeight: 17,
+  },
+  previewAnswerText: {
+    color: '#675F57',
+    fontFamily: FOLIO_HAND_FONT,
+    fontSize: 12.5,
+    lineHeight: 16,
+  },
+  chevron: {
+    color: '#746C64',
+    fontSize: 22,
+    lineHeight: 26,
+  },
+  emptyPreviewRow: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 252, 244, 0.62)',
+    borderColor: 'rgba(199, 181, 145, 0.72)',
+    borderRadius: 17,
+    borderWidth: 1.2,
+    justifyContent: 'center',
+    minHeight: 74,
+    padding: 14,
+  },
+  emptyPreviewText: {
+    color: '#6D665D',
+    fontFamily: FOLIO_HAND_FONT,
     fontSize: 15,
-    lineHeight: 21,
   },
+  emptyState: {
+    backgroundColor: '#FBF7EE',
+    borderColor: '#E2D4BC',
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 18,
+  },
+  emptyTitle: {
+    color: '#29231D',
+    fontFamily: FOLIO_HAND_FONT,
+    fontSize: 24,
+  },
+  emptyText: {
+    color: '#6D665D',
+    fontFamily: FOLIO_HAND_FONT,
+    fontSize: 15,
+    marginTop: 6,
+  },
+
   pressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.98 }],
+    opacity: 0.92,
+    transform: [{ scale: 0.985 }],
   },
 });

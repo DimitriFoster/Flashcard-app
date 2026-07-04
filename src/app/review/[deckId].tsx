@@ -37,15 +37,18 @@ export default function DeckReviewScreen() {
     deckId?: string | string[];
     mode?: string | string[];
     cardSearch?: string | string[];
+    browseSearchLabel?: string | string[];
   }>();
   const deckId = Array.isArray(params.deckId) ? params.deckId[0] : params.deckId;
   const mode = Array.isArray(params.mode) ? params.mode[0] : params.mode;
   const cardSearch = Array.isArray(params.cardSearch) ? params.cardSearch[0] : params.cardSearch;
+  const browseSearchLabel = Array.isArray(params.browseSearchLabel) ? params.browseSearchLabel[0] : params.browseSearchLabel;
   const normalizedCardSearch = cardSearch?.trim().toLowerCase() ?? '';
   const isDueMode = mode === 'due';
 
   const [decks, setDecks] = useState<Deck[]>([]);
   const [cards, setCards] = useState<Flashcard[]>([]);
+  const [totalDeckCards, setTotalDeckCards] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [canUndoReview, setCanUndoReview] = useState(false);
@@ -118,9 +121,11 @@ export default function DeckReviewScreen() {
     useCallback(() => {
       const nextDecks = getDecks();
       const nextCards = loadCardsForCurrentMode();
+      const totalCardsInDeck = deckId ? getFlashcardsByDeck(deckId).length : nextCards.length;
 
       setDecks(nextDecks);
       setCards(nextCards);
+      setTotalDeckCards(totalCardsInDeck);
       setCurrentIndex(0);
       setFlipped(false);
       setCanUndoReview(false);
@@ -354,6 +359,7 @@ export default function DeckReviewScreen() {
       deckName={deckName}
       currentIndex={currentIndex}
       cardsLength={cards.length}
+      totalDeckCards={totalDeckCards}
       currentCard={currentCard}
       flipped={flipped}
       translateX={translateX}
@@ -363,17 +369,21 @@ export default function DeckReviewScreen() {
       isEditing={isEditing}
       editFront={editFront}
       editBack={editBack}
+      cardSearch={browseSearchLabel ?? cardSearch}
       onChangeEditFront={setEditFront}
       onChangeEditBack={setEditBack}
       onStartEdit={handleStartEditing}
       onCancelEdit={handleCancelEditing}
       onSaveEdit={handleSaveEditing}
+      onPreviousCard={goToPreviousCard}
+      onNextCard={goToNextCard}
+      onToggleFlip={() => setFlipped((value) => !value)}
       onBack={() =>
         router.push(
           isDueMode
             ? '/review'
-            : cardSearch
-              ? { pathname: '/review/browse', params: { q: cardSearch } }
+            : browseSearchLabel || cardSearch
+              ? { pathname: '/review/browse', params: { q: browseSearchLabel ?? cardSearch } }
               : '/review/browse'
         )
       }

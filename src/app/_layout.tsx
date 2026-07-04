@@ -12,15 +12,35 @@
  * than another permanent tab in the app.
  */
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { ShortStack_400Regular, useFonts } from '@expo-google-fonts/short-stack';
 import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import React from 'react';
 import { useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { useAndroidImmersiveNavigation } from '@/hooks/use-android-immersive-navigation';
+
+SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const [fontsLoaded, fontError] = useFonts({
+    ShortStack_400Regular,
+  });
+
+  useAndroidImmersiveNavigation();
+
+  React.useEffect(() => {
+    if (fontsLoaded || fontError) {
+      SplashScreen.hideAsync().catch(() => undefined);
+    }
+  }, [fontsLoaded, fontError]);
+
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
 
   return (
     /**
