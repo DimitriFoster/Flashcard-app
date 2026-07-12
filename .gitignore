@@ -44,3 +44,8 @@ app-example
 .aider*
 .claude/
 CLAUDE.md
+
+# Maestro local run artifacts (keep .maestro flows and approved baselines tracked)
+maestro-debug-output/
+.maestro/output/
+.maestro/reports/

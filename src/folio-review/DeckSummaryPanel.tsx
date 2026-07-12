@@ -3,7 +3,7 @@ import { Image, ImageBackground, StyleSheet, Text, View } from 'react-native';
 import { folioReviewAssets } from './folioReviewAssets';
 import { FOLIO_HAND_FONT } from './folioFonts';
 import { SessionFlowStrip } from './SessionFlowStrip';
-import { SessionTokenStatus } from './types';
+import { ReviewGrade, SessionTokenStatus } from './types';
 
 type Props = {
   deckTitle: string;
@@ -13,6 +13,9 @@ type Props = {
   cardsLeft: number;
   tokens: SessionTokenStatus[];
   activeTokenIndex: number;
+  layoutScale?: number;
+  placementGrade?: ReviewGrade | null;
+  placementAnimationKey?: number;
 };
 
 export function DeckSummaryPanel({
@@ -23,15 +26,27 @@ export function DeckSummaryPanel({
   cardsLeft,
   tokens,
   activeTokenIndex,
+  layoutScale = 1,
+  placementGrade = null,
+  placementAnimationKey = 0,
 }: Props) {
+  const scale = Math.max(0.72, Math.min(layoutScale, 1));
+  const compact = scale < 0.95;
+  const shellHeight = Math.round(200 * scale);
+  const deckSectionHeight = Math.round(101 * scale);
+  const horizontalPadding = Math.round(39 * scale);
+  const brainSize = Math.round(50 * scale);
+  const titleFontSize = Math.round(21 * scale);
+  const titleLineHeight = Math.round(23 * scale);
+
   return (
-    <ImageBackground source={folioReviewAssets.deckPanel.shell} resizeMode="stretch" style={styles.shell} imageStyle={styles.shellImage}>
-      <View style={styles.deckSection}>
-        <Image source={folioReviewAssets.deckPanel.brainCloud} resizeMode="contain" style={styles.brainIcon} />
+    <ImageBackground source={folioReviewAssets.deckPanel.shell} resizeMode="stretch" style={[styles.shell, { height: shellHeight }]} imageStyle={styles.shellImage}>
+      <View style={[styles.deckSection, { height: deckSectionHeight, paddingHorizontal: horizontalPadding, paddingTop: Math.round(8 * scale) }]}>
+        <Image source={folioReviewAssets.deckPanel.brainCloud} resizeMode="contain" style={[styles.brainIcon, { height: brainSize, marginRight: Math.round(16 * scale), width: brainSize }]} />
         <View style={styles.deckTextBlock}>
-          <Text allowFontScaling={false} numberOfLines={2} ellipsizeMode="tail" style={styles.deckTitle}>{deckTitle}</Text>
-          <Text allowFontScaling={false} numberOfLines={1} style={styles.deckSubtitle}>{deckSubtitle}</Text>
-          <Text allowFontScaling={false} style={styles.countsLine}>
+          <Text allowFontScaling={false} numberOfLines={compact ? 1 : 2} ellipsizeMode="tail" style={[styles.deckTitle, { fontSize: titleFontSize, lineHeight: titleLineHeight }]}>{deckTitle}</Text>
+          <Text allowFontScaling={false} numberOfLines={1} style={[styles.deckSubtitle, { fontSize: titleFontSize, lineHeight: titleLineHeight }]}>{deckSubtitle}</Text>
+          <Text allowFontScaling={false} numberOfLines={1} style={[styles.countsLine, { fontSize: 13.7 * scale, lineHeight: Math.round(16 * scale) }]}>
             <Text style={styles.blueCount}>{dueCount} due</Text>
             <Text style={styles.dot}>  •  </Text>
             <Text>{totalCards} total cards</Text>
@@ -39,15 +54,21 @@ export function DeckSummaryPanel({
         </View>
       </View>
 
-      <View style={styles.flowSection}>
+      <View style={[styles.flowSection, { paddingBottom: Math.round(10 * scale), paddingHorizontal: Math.round(35 * scale), paddingTop: compact ? 0 : Math.round(5 * scale) }]}>
         <View style={styles.flowHeaderRow}>
           <View>
-            <Text allowFontScaling={false} style={styles.flowTitle}>Session flow</Text>
-            <Image source={folioReviewAssets.deckPanel.sessionFlowUnderline} resizeMode="stretch" style={styles.flowUnderline} />
+            <Text allowFontScaling={false} style={[styles.flowTitle, { fontSize: Math.round(16 * scale) }]}>Session flow</Text>
+            <Image source={folioReviewAssets.deckPanel.sessionFlowUnderline} resizeMode="stretch" style={[styles.flowUnderline, { height: Math.max(6, Math.round(9 * scale)), width: Math.round(92 * scale) }]} />
           </View>
-          <Text allowFontScaling={false} style={styles.cardsLeft}><Text style={styles.blueCount}>{cardsLeft}</Text> cards left</Text>
+          <Text allowFontScaling={false} style={[styles.cardsLeft, { fontSize: Math.round(13 * scale) }]}><Text style={styles.blueCount}>{cardsLeft}</Text> cards left</Text>
         </View>
-        <SessionFlowStrip tokens={tokens} activeIndex={activeTokenIndex} />
+        <SessionFlowStrip
+          tokens={tokens}
+          activeIndex={activeTokenIndex}
+          layoutScale={scale}
+          placementGrade={placementGrade}
+          placementAnimationKey={placementAnimationKey}
+        />
       </View>
     </ImageBackground>
   );
@@ -56,7 +77,7 @@ export function DeckSummaryPanel({
 const styles = StyleSheet.create({
   shell: {
     alignSelf: 'center',
-    height: 190,
+    height: 200,
     marginTop: 3,
     overflow: 'hidden',
     width: '100%',
@@ -110,6 +131,7 @@ const styles = StyleSheet.create({
   },
   flowSection: {
     flex: 1,
+    paddingBottom: 10,
     paddingHorizontal: 35,
     paddingTop: 5,
   },

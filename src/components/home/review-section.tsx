@@ -16,6 +16,8 @@ export function HomeReviewSection({ onPressReview }: HomeReviewSectionProps) {
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel="Open review workspace"
+      testID="home-review-section"
       onPress={onPressReview}
       style={({ pressed }) => [styles.section, pressed && styles.pressed]}>
       <HomePanelFill source={reviewPanelSwatch} opacity={1} />

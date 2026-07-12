@@ -1,0 +1,10 @@
+appId: com.midlunch.Flashcardapp
+---
+- launchApp:
+    clearState: false
+- openLink: flashcardapp://maestro-seed
+- assertVisible: "Maestro test data ready"
+- assertVisible:
+    id: "maestro-open-browse-decks"
+- assertVisible:
+    id: "maestro-open-review-due-cards"

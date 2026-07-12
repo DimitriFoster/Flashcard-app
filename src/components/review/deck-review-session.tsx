@@ -15,7 +15,6 @@ import {
   Image,
   ImageBackground,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -27,45 +26,41 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BottomTabBar } from '@/folio-review/BottomTabBar';
 import { DeckSummaryPanel } from '@/folio-review/DeckSummaryPanel';
 import { FolioAssetButton } from '@/folio-review/FolioAssetButton';
 import { folioReviewAssets } from '@/folio-review/folioReviewAssets';
 import { GradeButtonRow } from '@/folio-review/GradeButtonRow';
 import { FOLIO_HAND_FONT } from '@/folio-review/folioFonts';
-import type { FolioTab, SessionTokenStatus } from '@/folio-review/types';
+import type { SessionTokenStatus } from '@/folio-review/types';
 import type { Flashcard, ReviewGrade } from '@/types/flashcard';
 
 const TUTORIAL_IMAGE = require('../../../assets/tutorial/session-flow-tutorial.png');
 
 const DEFAULT_SESSION_TOKENS: SessionTokenStatus[] = [
-  'new',
+  'empty',
   'new',
   'new',
   'again',
   'hard',
-  'good',
-  'good',
-  'empty',
   'empty',
   'empty',
   'good',
+  'empty',
+  'empty',
   'easy',
-  'again',
-  'hard',
-  'new',
+  'empty',
 ];
 
-const ACTIVE_TOKEN_INDEX = 6;
+const ACTIVE_TOKEN_INDEX = 0;
 
 const browseAssets = {
   deckHeaderShell: require('../../../assets/folio-ui/browse/panels/deck_header_shell_round14.png'),
   matchesStripShell: require('../../../assets/folio-ui/browse/panels/matches_strip_shell_round14.png'),
   searchIcon: require('../../../assets/folio-ui/browse/panels/search_icon_round15.png'),
-  previousButton: require('../../../assets/folio-ui/browse/controls/previous_button_round15.png'),
+  previousButton: require('../../../assets/folio-ui/browse/controls/previous_button_transparent_round66.png'),
   flipButton: require('../../../assets/folio-ui/browse/controls/flip_button_round15.png'),
-  nextButton: require('../../../assets/folio-ui/browse/controls/next_button_round15.png'),
-  noteBar: require('../../../assets/folio-ui/browse/footer/browse_note_bar_round15.png'),
+  nextButton: require('../../../assets/folio-ui/browse/controls/next_button_transparent_round66.png'),
+  noteBar: require('../../../assets/folio-ui/browse/footer/browse_note_bar_transparent_round66.png'),
 } as const;
 
 type DeckReviewSessionProps = {
@@ -114,9 +109,14 @@ function getCardHint(flipped: boolean) {
   return flipped ? 'Tap to return to prompt' : 'Tap to reveal answer';
 }
 
-function NavigateButton({ label, onPress }: { label: string; onPress?: () => void }) {
+function NavigateButton({ label, accessibilityLabel, testID, onPress }: { label: string; accessibilityLabel: string; testID: string; onPress?: () => void }) {
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.browseButton, pressed && styles.pressed]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      testID={testID}
+      onPress={onPress}
+      style={({ pressed }) => [styles.browseButton, pressed && styles.pressed]}>
       <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={styles.browseButtonText}>
         {label}
       </Text>
@@ -155,19 +155,34 @@ export function DeckReviewSession({
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const [isTutorialOpen, setIsTutorialOpen] = React.useState(false);
+  const [flowPlacement, setFlowPlacement] = React.useState<{ grade: ReviewGrade; key: number } | null>(null);
+  const flowPlacementTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flowPlacementKeyRef = React.useRef(0);
+  const flowPlacementInFlightRef = React.useRef(false);
 
   const pageWidth = Math.min(width - 18, 434);
+  const safeHeight = height - insets.top - insets.bottom;
   const isCompactHeight = height < 820;
+  const useCompactGuideClose = width < 370 || height < 720;
   const isLandscape = width > height;
   const isBrowseMode = !showGradeButtons;
+  const isReviewTiny = showGradeButtons && (width < 360 || safeHeight < 640);
+  const isReviewSmall = showGradeButtons && !isReviewTiny && (width < 380 || safeHeight < 710);
+  const isReviewMedium = showGradeButtons && !isReviewTiny && !isReviewSmall && (width < 410 || safeHeight < 825);
+  const reviewLayoutScale = isReviewTiny ? 0.82 : isReviewSmall ? 0.91 : 1;
+  const reviewCardInteriorScale = isReviewTiny ? 0.82 : isReviewSmall ? 0.9 : 1;
+  const reviewContentGap = isReviewTiny ? 5 : isReviewSmall ? 6 : isReviewMedium ? 7 : 9;
   const dueOrVisibleCount = Math.max(cardsLength - currentIndex, 0);
   const totalCardsForPanel = Math.max(totalDeckCards ?? cardsLength, cardsLength);
   const currentCardNumber = cardsLength > 0 ? currentIndex + 1 : 0;
   const cardNumberText = `${currentCardNumber} / ${cardsLength || totalCardsForPanel || 0}`;
   const cardWidth = Math.min(pageWidth - 18, 404);
+  const reviewCardRatio = isReviewTiny ? 0.72 : isReviewSmall ? 0.8 : isReviewMedium ? 0.89 : 0.94;
+  const reviewCardMinHeight = isReviewTiny ? 250 : isReviewSmall ? 286 : isReviewMedium ? 322 : 344;
+  const reviewCardMaxHeight = isReviewTiny ? 282 : isReviewSmall ? 318 : isReviewMedium ? 356 : 382;
   const cardHeight = isLandscape
-    ? clamp(height * 0.48, 250, 320)
-    : clamp(Math.round(cardWidth * (isCompactHeight ? 0.82 : 0.86)), isCompactHeight ? 304 : 318, isCompactHeight ? 332 : 352);
+    ? clamp(height * 0.48, 230, 320)
+    : clamp(Math.round(cardWidth * reviewCardRatio), reviewCardMinHeight, reviewCardMaxHeight);
   const stackWidth = cardWidth + 16;
   const stackHeight = cardHeight + 16;
   const browseFlipAnim = React.useRef(new Animated.Value(flipped ? 1 : 0)).current;
@@ -184,12 +199,36 @@ export function DeckReviewSession({
   const browseFrontRotation = browseFlipAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
   const browseBackRotation = browseFlipAnim.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] });
 
-  function navigateTab(tab: FolioTab) {
-    if (tab === 'review') router.push('/review');
-    if (tab === 'browse') router.push('/review/browse');
-    if (tab === 'notes') router.push('/notes');
-    if (tab === 'progress') router.push('/review/stats');
-  }
+  React.useEffect(() => {
+    setFlowPlacement(null);
+    flowPlacementInFlightRef.current = false;
+  }, [currentCard?.id]);
+
+  React.useEffect(() => {
+    return () => {
+      if (flowPlacementTimeoutRef.current) {
+        clearTimeout(flowPlacementTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleGradeWithFlowAnimation = React.useCallback((grade: ReviewGrade) => {
+    if (flowPlacementInFlightRef.current) return;
+
+    flowPlacementInFlightRef.current = true;
+    flowPlacementKeyRef.current += 1;
+    setFlowPlacement({ grade, key: flowPlacementKeyRef.current });
+
+    if (flowPlacementTimeoutRef.current) {
+      clearTimeout(flowPlacementTimeoutRef.current);
+    }
+
+    flowPlacementTimeoutRef.current = setTimeout(() => {
+      setFlowPlacement(null);
+      flowPlacementInFlightRef.current = false;
+      onGrade(grade);
+    }, 820);
+  }, [onGrade]);
 
   if (isBrowseMode) {
     const browseAvailableHeight = Math.max(height - insets.top - 8, 700);
@@ -222,13 +261,19 @@ export function DeckReviewSession({
     const browseTopSubtitle = getDeckSubtitle(deckName) || 'Master Deck';
 
     return (
-      <ImageBackground source={folioReviewAssets.background.pagePaper} resizeMode="cover" style={styles.screen}>
+      <ImageBackground
+        accessibilityLabel={isBrowseMode ? "Browse session screen" : "Review session screen"}
+        testID={isBrowseMode ? "browse-session-screen" : "review-session-screen"}
+        source={folioReviewAssets.background.pagePaper}
+        resizeMode="cover"
+        style={styles.screen}>
         <View style={[styles.safeArea, { paddingTop: insets.top + 4 }]}> 
           <View style={[styles.browsePageFrame, { width: pageWidth }]}> 
             <View style={styles.headerRow}> 
               <FolioAssetButton
                 source={folioReviewAssets.header.back}
                 accessibilityLabel="Go back"
+                testID="session-back"
                 onPress={onBack}
                 style={styles.backButton}
               />
@@ -239,6 +284,7 @@ export function DeckReviewSession({
                 <FolioAssetButton
                   source={folioReviewAssets.header.edit}
                   accessibilityLabel="Edit current card"
+                  testID="session-edit-current-card"
                   onPress={currentCard ? onStartEdit : undefined}
                   disabled={!currentCard || !onStartEdit}
                   style={styles.headerActionButton}
@@ -246,6 +292,7 @@ export function DeckReviewSession({
                 <FolioAssetButton
                   source={folioReviewAssets.header.help}
                   accessibilityLabel="Open help"
+                  testID="session-open-help"
                   onPress={() => setIsTutorialOpen(true)}
                   style={styles.helpButton}
                 />
@@ -429,23 +476,19 @@ export function DeckReviewSession({
 
             {currentCard && !isEditing ? (
               <View style={[styles.browseCardControls, { height: browseControlsHeight }]}> 
-                <Pressable accessibilityRole="button" accessibilityLabel="Previous card" onPress={onPreviousCard} style={({ pressed }) => [styles.browseControlSide, pressed && styles.pressed]}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Previous card" testID="browse-session-previous-card-image" onPress={onPreviousCard} style={({ pressed }) => [styles.browseControlSide, pressed && styles.pressed]}>
                   <Image source={browseAssets.previousButton} resizeMode="contain" style={styles.browseControlImage} />
                 </Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel={flipped ? 'Show prompt' : 'Flip card'} onPress={onToggleFlip} style={({ pressed }) => [styles.browseControlFlip, pressed && styles.pressed]}>
+                <Pressable accessibilityRole="button" accessibilityLabel={flipped ? 'Show prompt' : 'Flip card'} testID="browse-session-flip-card-image" onPress={onToggleFlip} style={({ pressed }) => [styles.browseControlFlip, pressed && styles.pressed]}>
                   <Image source={browseAssets.flipButton} resizeMode="contain" style={styles.browseControlImage} />
                 </Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel="Next card" onPress={onNextCard} style={({ pressed }) => [styles.browseControlSide, pressed && styles.pressed]}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Next card" testID="browse-session-next-card-image" onPress={onNextCard} style={({ pressed }) => [styles.browseControlSide, pressed && styles.pressed]}>
                   <Image source={browseAssets.nextButton} resizeMode="contain" style={styles.browseControlImage} />
                 </Pressable>
               </View>
             ) : null}
 
             <Image source={browseAssets.noteBar} resizeMode="stretch" style={[styles.browseNoteBar, { height: browseNoteHeight }]} />
-          </View>
-
-          <View style={[styles.bottomNavWrap, { paddingBottom: Platform.OS === 'android' ? 0 : Math.max(insets.bottom, 4), width: pageWidth }]}> 
-            <BottomTabBar activeTab="browse" onNavigateTab={navigateTab} />
           </View>
         </View>
 
@@ -454,11 +497,23 @@ export function DeckReviewSession({
             <View style={styles.tutorialCard}>
               <View style={styles.tutorialHeader}>
                 <View>
-                  <Text style={styles.tutorialEyebrow}>Folio guide</Text>
-                  <Text style={styles.tutorialTitle}>How review flow works</Text>
+                  <Text style={styles.tutorialEyebrow}>Beginner guide</Text>
+                  <Text style={styles.tutorialTitle}>Spaced repetition basics</Text>
                 </View>
-                <Pressable accessibilityRole="button" onPress={() => setIsTutorialOpen(false)} style={({ pressed }) => [styles.tutorialCloseButton, pressed && styles.pressed]}>
-                  <Text style={styles.tutorialCloseText}>Close</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Close help"
+                  testID="session-close-help"
+                  onPress={() => setIsTutorialOpen(false)}
+                  style={({ pressed }) => [
+                    styles.tutorialCloseButton,
+                    useCompactGuideClose && styles.tutorialCloseButtonCompact,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={[styles.tutorialCloseText, useCompactGuideClose && styles.tutorialCloseTextCompact]}>
+                    {useCompactGuideClose ? '×' : 'Close'}
+                  </Text>
                 </Pressable>
               </View>
               <Image source={TUTORIAL_IMAGE} resizeMode="contain" style={styles.tutorialImage} />
@@ -470,7 +525,12 @@ export function DeckReviewSession({
   }
 
   return (
-    <ImageBackground source={folioReviewAssets.background.pagePaper} resizeMode="cover" style={styles.screen}>
+    <ImageBackground
+      accessibilityLabel="Review session screen"
+      testID="review-session-screen"
+      source={folioReviewAssets.background.pagePaper}
+      resizeMode="cover"
+      style={styles.screen}>
       <View style={[styles.safeArea, { paddingTop: insets.top + 4 }]}> 
         <View style={[styles.pageFrame, { width: pageWidth }]}> 
           <View style={styles.headerRow}> 
@@ -513,8 +573,8 @@ export function DeckReviewSession({
             style={styles.scroll}
             contentContainerStyle={[
               styles.scrollContent,
-              isCompactHeight && styles.scrollContentCompact,
-              { paddingBottom: isCompactHeight ? 4 : 8 },
+              (isReviewTiny || isReviewSmall) && styles.scrollContentCompact,
+              { gap: reviewContentGap, paddingBottom: isReviewTiny || isReviewSmall ? 4 : 8 },
             ]}
           >
             <DeckSummaryPanel
@@ -525,6 +585,9 @@ export function DeckReviewSession({
               cardsLeft={dueOrVisibleCount}
               tokens={DEFAULT_SESSION_TOKENS}
               activeTokenIndex={ACTIVE_TOKEN_INDEX}
+              layoutScale={reviewLayoutScale}
+              placementGrade={flowPlacement?.grade ?? null}
+              placementAnimationKey={flowPlacement?.key ?? 0}
             />
 
             <View style={[styles.cardStage, { minHeight: stackHeight + 4 }]}> 
@@ -591,38 +654,172 @@ export function DeckReviewSession({
                       },
                     ]}
                   >
-                    <ImageBackground
-                      source={folioReviewAssets.card.frontSurface}
-                      resizeMode="stretch"
-                      style={styles.cardSurface}
-                      imageStyle={styles.cardImage}
+                    <Animated.View
+                      style={[
+                        styles.browseFlipFace,
+                        styles.browseFrontFace,
+                        { transform: [{ perspective: 1100 }, { rotateY: browseFrontRotation }] },
+                      ]}
                     >
-                      <View style={styles.cardTopRow}>
-                        <Image source={folioReviewAssets.card.favoriteStar} resizeMode="contain" style={styles.favoriteStar} />
-                        <Text style={styles.cardProgress}>{cardNumberText}</Text>
-                      </View>
+                      <ImageBackground
+                        source={folioReviewAssets.card.frontSurface}
+                        resizeMode="stretch"
+                        style={[
+                          styles.cardSurface,
+                          {
+                            paddingBottom: Math.round(16 * reviewCardInteriorScale),
+                            paddingHorizontal: Math.round(26 * reviewCardInteriorScale),
+                            paddingTop: Math.round(18 * reviewCardInteriorScale),
+                          },
+                        ]}
+                        imageStyle={styles.cardImage}
+                      >
+                        <View style={[styles.cardTopRow, { minHeight: Math.round(36 * reviewCardInteriorScale) }]}>
+                          <Image
+                            source={folioReviewAssets.card.favoriteStar}
+                            resizeMode="contain"
+                            style={[
+                              styles.favoriteStar,
+                              {
+                                height: Math.round(32 * reviewCardInteriorScale),
+                                width: Math.round(32 * reviewCardInteriorScale),
+                              },
+                            ]}
+                          />
+                          <Text style={[styles.cardProgress, { fontSize: Math.round(23 * reviewCardInteriorScale) }]}>{cardNumberText}</Text>
+                        </View>
 
-                      <View style={styles.cardContent}> 
-                        <Text
-                          adjustsFontSizeToFit
-                          minimumFontScale={0.72}
-                          numberOfLines={flipped ? 7 : 5}
-                          style={[styles.cardText, flipped && styles.answerText]}
-                        >
-                          {getCardQuestion(currentCard, flipped)}
-                        </Text>
-                        <Image source={folioReviewAssets.card.questionUnderline} resizeMode="stretch" style={styles.questionUnderline} />
-                        {!flipped ? (
+                        <View style={[styles.cardContent, { paddingBottom: Math.round(14 * reviewCardInteriorScale) }]}>
+                          <Text
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.72}
+                            numberOfLines={5}
+                            style={[
+                              styles.cardText,
+                              {
+                                fontSize: Math.round(31 * reviewCardInteriorScale),
+                                lineHeight: Math.round(38 * reviewCardInteriorScale),
+                              },
+                            ]}
+                          >
+                            {currentCard.front}
+                          </Text>
+                          <Image
+                            source={folioReviewAssets.card.questionUnderline}
+                            resizeMode="stretch"
+                            style={[
+                              styles.questionUnderline,
+                              {
+                                height: Math.max(7, Math.round(10 * reviewCardInteriorScale)),
+                                marginTop: Math.round(10 * reviewCardInteriorScale),
+                              },
+                            ]}
+                          />
                           <Image
                             source={folioReviewAssets.card.retrievalGenerationIllustration}
                             resizeMode="contain"
-                            style={styles.cardIllustration}
+                            style={[
+                              styles.cardIllustration,
+                              {
+                                height: Math.round(70 * reviewCardInteriorScale),
+                                marginTop: Math.round(6 * reviewCardInteriorScale),
+                              },
+                            ]}
                           />
-                        ) : null}
-                      </View>
+                        </View>
 
-                      <Text numberOfLines={1} style={styles.tapHint}>{getCardHint(flipped)}</Text>
-                    </ImageBackground>
+                        <Text
+                          numberOfLines={1}
+                          style={[
+                            styles.tapHint,
+                            {
+                              fontSize: Math.round(18 * reviewCardInteriorScale),
+                              lineHeight: Math.round(22 * reviewCardInteriorScale),
+                            },
+                          ]}
+                        >
+                          {getCardHint(false)}
+                        </Text>
+                      </ImageBackground>
+                    </Animated.View>
+                    <Animated.View
+                      style={[
+                        styles.browseFlipFace,
+                        styles.browseBackFace,
+                        { transform: [{ perspective: 1100 }, { rotateY: browseBackRotation }] },
+                      ]}
+                    >
+                      <ImageBackground
+                        source={folioReviewAssets.card.frontSurface}
+                        resizeMode="stretch"
+                        style={[
+                          styles.cardSurface,
+                          {
+                            paddingBottom: Math.round(16 * reviewCardInteriorScale),
+                            paddingHorizontal: Math.round(26 * reviewCardInteriorScale),
+                            paddingTop: Math.round(18 * reviewCardInteriorScale),
+                          },
+                        ]}
+                        imageStyle={styles.cardImage}
+                      >
+                        <View style={[styles.cardTopRow, { minHeight: Math.round(36 * reviewCardInteriorScale) }]}>
+                          <Image
+                            source={folioReviewAssets.card.favoriteStar}
+                            resizeMode="contain"
+                            style={[
+                              styles.favoriteStar,
+                              {
+                                height: Math.round(32 * reviewCardInteriorScale),
+                                width: Math.round(32 * reviewCardInteriorScale),
+                              },
+                            ]}
+                          />
+                          <Text style={[styles.cardProgress, { fontSize: Math.round(23 * reviewCardInteriorScale) }]}>{cardNumberText}</Text>
+                        </View>
+
+                        <View style={[styles.cardContent, { paddingBottom: Math.round(14 * reviewCardInteriorScale) }]}>
+                          <Text
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.72}
+                            numberOfLines={7}
+                            style={[
+                              styles.cardText,
+                              styles.answerText,
+                              {
+                                fontSize: Math.round(27 * reviewCardInteriorScale),
+                                lineHeight: Math.round(34 * reviewCardInteriorScale),
+                              },
+                            ]}
+                          >
+                            {currentCard.back}
+                          </Text>
+                          <Image
+                            source={folioReviewAssets.card.questionUnderline}
+                            resizeMode="stretch"
+                            style={[
+                              styles.questionUnderline,
+                              {
+                                height: Math.max(7, Math.round(10 * reviewCardInteriorScale)),
+                                marginTop: Math.round(10 * reviewCardInteriorScale),
+                              },
+                            ]}
+                          />
+                        </View>
+
+                        <Text
+                          numberOfLines={1}
+                          style={[
+                            styles.tapHint,
+                            {
+                              fontSize: Math.round(18 * reviewCardInteriorScale),
+                              lineHeight: Math.round(22 * reviewCardInteriorScale),
+                            },
+                          ]}
+                        >
+                          {getCardHint(true)}
+                        </Text>
+                      </ImageBackground>
+                    </Animated.View>
                   </Animated.View>
                 </View>
               ) : (
@@ -642,21 +839,17 @@ export function DeckReviewSession({
               )}
             </View>
 
-            {currentCard && showGradeButtons && !isEditing ? <GradeButtonRow onGrade={onGrade} /> : null}
+            {currentCard && showGradeButtons && !isEditing ? <GradeButtonRow onGrade={handleGradeWithFlowAnimation} layoutScale={reviewLayoutScale} /> : null}
 
             {currentCard && isBrowseMode && !isEditing ? (
               <View style={styles.browseControls}> 
-                <NavigateButton label="‹ Previous" onPress={onPreviousCard} />
-                <NavigateButton label={flipped ? 'Prompt' : 'Flip card'} onPress={onToggleFlip} />
-                <NavigateButton label="Next ›" onPress={onNextCard} />
+                <NavigateButton label="‹ Previous" accessibilityLabel="Previous card" testID="session-previous-card" onPress={onPreviousCard} />
+                <NavigateButton label={flipped ? 'Prompt' : 'Flip card'} accessibilityLabel={flipped ? 'Show prompt' : 'Flip card'} testID="session-flip-card" onPress={onToggleFlip} />
+                <NavigateButton label="Next ›" accessibilityLabel="Next card" testID="session-next-card" onPress={onNextCard} />
                 {cardSearch?.trim() ? <Text style={styles.browseSearchNote}>Search: {cardSearch.trim()}</Text> : null}
               </View>
             ) : null}
           </ScrollView>
-        </View>
-
-        <View style={[styles.bottomNavWrap, { paddingBottom: Platform.OS === 'android' ? 0 : Math.max(insets.bottom, 4), width: pageWidth }]}> 
-          <BottomTabBar activeTab="review" onNavigateTab={navigateTab} />
         </View>
       </View>
 
@@ -665,11 +858,23 @@ export function DeckReviewSession({
           <View style={styles.tutorialCard}>
             <View style={styles.tutorialHeader}>
               <View>
-                <Text style={styles.tutorialEyebrow}>Folio guide</Text>
-                <Text style={styles.tutorialTitle}>How review flow works</Text>
+                <Text style={styles.tutorialEyebrow}>Beginner guide</Text>
+                <Text style={styles.tutorialTitle}>Spaced repetition basics</Text>
               </View>
-              <Pressable accessibilityRole="button" onPress={() => setIsTutorialOpen(false)} style={({ pressed }) => [styles.tutorialCloseButton, pressed && styles.pressed]}>
-                <Text style={styles.tutorialCloseText}>Close</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close help"
+                testID="session-close-help"
+                onPress={() => setIsTutorialOpen(false)}
+                style={({ pressed }) => [
+                  styles.tutorialCloseButton,
+                  useCompactGuideClose && styles.tutorialCloseButtonCompact,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={[styles.tutorialCloseText, useCompactGuideClose && styles.tutorialCloseTextCompact]}>
+                  {useCompactGuideClose ? '×' : 'Close'}
+                </Text>
               </Pressable>
             </View>
             <Image source={TUTORIAL_IMAGE} resizeMode="contain" style={styles.tutorialImage} />
@@ -780,30 +985,31 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    transform: [{ translateY: 7 }],
   },
   browseMiniTokenWrap: {
     alignItems: 'center',
-    height: 38,
+    height: 32,
     justifyContent: 'center',
-    marginLeft: -2,
+    marginLeft: -1,
     position: 'relative',
-    width: 19,
+    width: 14,
   },
   browseMiniRays: {
-    height: 12,
+    height: 10,
     position: 'absolute',
-    top: -1,
-    width: 15,
+    top: 1,
+    width: 12,
   },
   browseMiniToken: {
-    height: 24,
-    width: 15,
+    height: 19,
+    width: 12,
   },
   browseMiniTriangle: {
-    bottom: 0,
-    height: 8,
+    bottom: 2,
+    height: 6,
     position: 'absolute',
-    width: 10,
+    width: 8,
   },
   browseFlipFace: {
     ...StyleSheet.absoluteFillObject,
@@ -1111,9 +1317,9 @@ const styles = StyleSheet.create({
   },
   tutorialCard: {
     backgroundColor: '#FFF9EC',
-    borderColor: '#65A6DE',
+    borderColor: '#D8C8A9',
     borderRadius: 24,
-    borderWidth: 2,
+    borderWidth: 1,
     gap: 14,
     maxHeight: '92%',
     maxWidth: 520,
@@ -1127,15 +1333,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   tutorialEyebrow: {
-    color: '#0C73DB',
-    fontSize: 12,
+    color: '#7A6D5E',
+    fontSize: 13,
+    lineHeight: 17,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   tutorialTitle: {
     color: '#26211C',
-    fontSize: 22,
-    fontWeight: '900',
+    fontFamily: FOLIO_HAND_FONT,
+    fontSize: 25,
+    fontWeight: '400',
+    lineHeight: 31,
   },
   tutorialCloseButton: {
     alignItems: 'center',
@@ -1147,9 +1356,21 @@ const styles = StyleSheet.create({
     minHeight: 36,
     paddingHorizontal: 14,
   },
+  tutorialCloseButtonCompact: {
+    borderRadius: 999,
+    height: 36,
+    minHeight: 36,
+    paddingHorizontal: 0,
+    width: 36,
+  },
   tutorialCloseText: {
     color: '#D98200',
     fontWeight: '900',
+  },
+  tutorialCloseTextCompact: {
+    fontSize: 24,
+    lineHeight: 27,
+    textAlign: 'center',
   },
   tutorialImage: {
     height: 520,

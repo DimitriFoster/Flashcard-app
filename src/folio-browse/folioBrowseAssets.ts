@@ -21,11 +21,11 @@ export const folioBrowseAssets = {
     retrievalGenerationIllustration: folioReviewAssets.card.retrievalGenerationIllustration,
   },
   controls: {
-    previous: require('../../assets/folio-ui/browse/controls/previous_button.png'),
+    previous: require('../../assets/folio-ui/browse/controls/previous_button_transparent_round66.png'),
     flip: require('../../assets/folio-ui/browse/controls/flip_button.png'),
-    next: require('../../assets/folio-ui/browse/controls/next_button.png'),
+    next: require('../../assets/folio-ui/browse/controls/next_button_transparent_round66.png'),
   },
   footer: {
-    noteBar: require('../../assets/folio-ui/browse/footer/browse_note_bar.png'),
+    noteBar: require('../../assets/folio-ui/browse/footer/browse_note_bar_transparent_round66.png'),
   },
 } as const;

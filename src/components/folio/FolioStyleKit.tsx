@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
   type PressableProps,
   type StyleProp,
@@ -18,6 +19,7 @@ import { CrayonFill } from '@/components/ui/crayon-fill';
 
 import { FolioSvgIcon, type FolioSvgIconName } from './icons';
 import { FOLIO, FOLIO_TONES, type FolioIconName, type FolioTone } from './folio-theme';
+import { FOLIO_HAND_FONT } from '@/folio-review/folioFonts';
 
 const SESSION_FLOW_TUTORIAL = require('../../../assets/tutorial/session-flow-tutorial.png');
 
@@ -336,6 +338,9 @@ export function FolioBrowseControls({ onPrevious, onFlip, onNext }: { onPrevious
 }
 
 export function FolioTutorialModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { width, height } = useWindowDimensions();
+  const useCompactGuideClose = width < 370 || height < 720;
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.tutorialOverlay}>
@@ -343,10 +348,21 @@ export function FolioTutorialModal({ visible, onClose }: { visible: boolean; onC
           <CrayonFill tone="review" variant="loose" opacity={0.2} />
           <View style={styles.tutorialHeader}>
             <View>
-              <Text style={styles.tutorialEyebrow}>Folio guide</Text>
-              <Text style={styles.tutorialTitle}>How review flow works</Text>
+              <Text style={styles.tutorialEyebrow}>Beginner guide</Text>
+              <Text style={styles.tutorialTitle}>Spaced repetition basics</Text>
             </View>
-            <FolioButton label="Close" tone="warning" icon="close" size="pill" onPress={onClose} />
+            {useCompactGuideClose ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close help"
+                onPress={onClose}
+                style={({ pressed }) => [styles.tutorialCloseCircle, pressed && styles.pressed]}
+              >
+                <Text style={styles.tutorialCloseCircleText}>×</Text>
+              </Pressable>
+            ) : (
+              <FolioButton label="Close" tone="warning" icon="close" size="pill" onPress={onClose} />
+            )}
           </View>
           <Image source={SESSION_FLOW_TUTORIAL} resizeMode="contain" style={styles.tutorialImage} />
         </View>
@@ -479,10 +495,12 @@ const styles = StyleSheet.create({
   browseSideButton: { flex: 1, minHeight: 58, borderRadius: FOLIO.radius.lg },
   browseFlipButton: { flex: 1.35, minHeight: 64, borderRadius: FOLIO.radius.lg, borderWidth: 2 },
   tutorialOverlay: { flex: 1, backgroundColor: 'rgba(42,36,31,0.42)', padding: FOLIO.spacing.lg, justifyContent: 'center' },
-  tutorialCard: { position: 'relative', overflow: 'hidden', borderRadius: FOLIO.radius.xl, backgroundColor: FOLIO.colors.card, borderColor: FOLIO.colors.blueCrayon, borderWidth: 1, padding: FOLIO.spacing.md, gap: FOLIO.spacing.md, ...FOLIO.shadows.card },
+  tutorialCard: { position: 'relative', overflow: 'hidden', borderRadius: FOLIO.radius.xl, backgroundColor: FOLIO.colors.card, borderColor: '#D8C8A9', borderWidth: 1, padding: FOLIO.spacing.md, gap: FOLIO.spacing.md, ...FOLIO.shadows.card },
   tutorialHeader: { position: 'relative', zIndex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: FOLIO.spacing.md },
-  tutorialEyebrow: { color: FOLIO.colors.blueDeep, fontSize: 12, lineHeight: 15, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase' },
-  tutorialTitle: { color: FOLIO.colors.ink, fontSize: 22, lineHeight: 27, fontWeight: '900' },
+  tutorialEyebrow: { color: '#7A6D5E', fontSize: 13, lineHeight: 17, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase' },
+  tutorialTitle: { color: FOLIO.colors.ink, fontFamily: FOLIO_HAND_FONT, fontSize: 25, lineHeight: 31, fontWeight: '400' },
   tutorialImage: { position: 'relative', zIndex: 1, width: '100%', minHeight: 420, maxHeight: 620, borderRadius: FOLIO.radius.lg },
+  tutorialCloseCircle: { alignItems: 'center', backgroundColor: FOLIO.colors.orangeSoft, borderColor: FOLIO.colors.orange, borderRadius: FOLIO.radius.pill, borderWidth: 2, height: 36, justifyContent: 'center', width: 36 },
+  tutorialCloseCircleText: { color: FOLIO.colors.orange, fontSize: 24, fontWeight: '900', lineHeight: 27, textAlign: 'center' },
   deckIconShell: { alignItems: 'center', justifyContent: 'center', backgroundColor: FOLIO.colors.card, borderColor: FOLIO.colors.blueCrayon, borderWidth: 1 },
 });

@@ -11,6 +11,7 @@
 import { StyleSheet } from 'react-native';
 
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/design';
+import { FOLIO_HAND_FONT } from '@/folio-review/folioFonts';
 
 export { COLORS };
 
@@ -200,8 +201,8 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
   },
   flowSearchText: {
-    color: COLORS.reviewDeep,
-    fontSize: 12,
+    color: '#7A6D5E',
+    fontSize: 13,
     lineHeight: 16,
     fontWeight: '800',
     textAlign: 'center',
@@ -311,8 +312,8 @@ export const styles = StyleSheet.create({
     fontWeight: '800',
   },
   browseScheduleNote: {
-    color: COLORS.reviewDeep,
-    fontSize: 12,
+    color: '#7A6D5E',
+    fontSize: 13,
     lineHeight: 16,
     fontWeight: '800',
     textAlign: 'center',
@@ -556,8 +557,8 @@ export const styles = StyleSheet.create({
     maxWidth: 520,
     maxHeight: '92%',
     borderRadius: RADIUS.xl,
-    borderColor: COLORS.reviewCrayon,
-    borderWidth: 2,
+    borderColor: '#D8C8A9',
+    borderWidth: 1,
     backgroundColor: COLORS.panel,
     padding: SPACING.md,
     gap: SPACING.md,
@@ -570,17 +571,18 @@ export const styles = StyleSheet.create({
     gap: SPACING.md,
   },
   tutorialEyebrow: {
-    color: COLORS.reviewDeep,
-    fontSize: 12,
+    color: '#7A6D5E',
+    fontSize: 13,
     lineHeight: 16,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   tutorialTitle: {
     color: COLORS.ink,
-    fontSize: 22,
-    lineHeight: 28,
-    fontWeight: '800',
+    fontFamily: FOLIO_HAND_FONT,
+    fontSize: 25,
+    lineHeight: 31,
+    fontWeight: '400',
   },
   tutorialCloseButton: {
     position: 'relative',

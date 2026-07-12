@@ -28,7 +28,7 @@ import { getDecks, getFlashcards } from '@/storage/flashcards';
 import type { Deck, Flashcard } from '@/types/flashcard';
 
 const browseDeckAssets = {
-  heroPanel: require('../../../assets/folio-ui/browse-selection/panels/browse_hero_panel_round44_crop_top.png'),
+  heroPanel: require('../../../assets/folio-ui/browse-selection/panels/browse_hero_panel_transparent_round66.png'),
   reviewDueCardsButton: require('../../../assets/folio-ui/browse-selection/header/review_due_cards_button_round22_padded.png'),
   openDeckButton: require('../../../assets/folio-ui/browse-selection/cards/open_deck_button_mockup_round22.png'),
   previewCollapsedPanels: [
@@ -244,18 +244,54 @@ export default function BrowseDecksScreen() {
     browseDeckAssets.crayonTextures[0];
 
   const contentWidth = Math.min(width - 32, 430);
-  const usableHeight = Math.max(680, height - insets.top - insets.bottom);
-  const compactScale = Math.min(1, usableHeight / 830);
-  const headerHeight = 72;
+  const safeHeight = Math.max(0, height - insets.top - insets.bottom);
+  const isNarrowScreen = width < 370;
+  const isShortScreen = safeHeight < 720;
+  const isVeryShortScreen = safeHeight < 660;
+  const compactScale = clamp(Math.min(width / 393, safeHeight / 830), 0.74, 1);
+  const headerScale = isNarrowScreen ? 0.82 : isShortScreen ? 0.9 : 1;
+  const headerHeight = Math.round(72 * headerScale);
+  const reviewDueScale = contentWidth < 400 ? 0.72 : contentWidth < 430 ? 0.86 : 1;
+  const reviewDueButtonWidth = Math.round(146 * reviewDueScale);
+  const reviewDueButtonHeight = Math.round(62 * reviewDueScale);
+  const reviewDueButtonRight = contentWidth < 400 ? 0 : contentWidth < 430 ? -12 : -26;
   const heroHeight = Math.round(contentWidth * 0.38 * compactScale);
-  const carouselScale = 1.5625;
+  const searchBarHeight = Math.round(clamp(heroHeight * 0.2, isNarrowScreen ? 21 : 24, 31));
+  const searchBarWidth = Math.round(contentWidth * (isNarrowScreen ? 0.44 : isShortScreen ? 0.52 : 0.58));
+  const searchPlaceholder = isNarrowScreen ? 'Search...' : 'Search decks or cards...';
+  const searchFontSize = Math.round(clamp(searchBarHeight * 0.46, 10, 13));
+  const searchIconSize = Math.round(clamp(searchBarHeight * 0.58, 12, 17));
+  const carouselScale = 1.5625 * (isNarrowScreen ? 0.94 : 1);
   const carouselItemWidth = Math.round(contentWidth * 0.34 * carouselScale);
-  const selectedDeckWidth = Math.round(carouselItemWidth * 1.16);
-  const selectedDeckHeight = Math.round(selectedDeckWidth * 1.25 * compactScale);
-  const sideDeckWidth = Math.round(carouselItemWidth * 0.84);
-  const sideDeckHeight = Math.round(sideDeckWidth * 1.48 * compactScale);
-  const previewWindowHeight = Math.round(Math.min(210, Math.max(168, usableHeight * 0.22)));
-  const previewRowHeight = Math.max(58, Math.round(64 * compactScale));
+  const baseSelectedDeckWidth = Math.round(carouselItemWidth * 1.16);
+  const baseSelectedDeckHeight = Math.round(baseSelectedDeckWidth * 1.25 * compactScale);
+  const baseSideDeckWidth = Math.round(carouselItemWidth * 0.84);
+  const baseSideDeckHeight = Math.round(baseSideDeckWidth * 1.48 * compactScale);
+  const previewWindowHeight = previewExpanded
+    ? Math.round(clamp(safeHeight * (isShortScreen ? 0.18 : 0.22), isVeryShortScreen ? 108 : 128, isShortScreen ? 150 : 210))
+    : Math.round(Math.min(210, Math.max(168, safeHeight * 0.22)));
+  const fixedVerticalSpace =
+    30 +
+    headerHeight +
+    8 +
+    heroHeight +
+    8 +
+    25 +
+    62 +
+    10 +
+    (previewExpanded ? previewWindowHeight + 8 : 0) +
+    Math.max(8, insets.bottom + 4);
+  const availableCarouselHeight = Math.max(118, safeHeight - fixedVerticalSpace);
+  const deckFitScale = previewExpanded
+    ? clamp((availableCarouselHeight - 14) / Math.max(1, baseSelectedDeckHeight), isVeryShortScreen ? 0.66 : 0.72, 1)
+    : 1;
+  const selectedDeckWidth = Math.round(baseSelectedDeckWidth * deckFitScale);
+  const selectedDeckHeight = Math.round(baseSelectedDeckHeight * deckFitScale);
+  const sideDeckWidth = Math.round(baseSideDeckWidth * deckFitScale);
+  const sideDeckHeight = Math.round(baseSideDeckHeight * deckFitScale);
+  const deckContentScale = clamp(selectedDeckHeight / 220, 0.64, 1);
+  const deckCarouselItemHeight = selectedDeckHeight + Math.round(14 * deckContentScale);
+  const previewRowHeight = Math.max(isShortScreen ? 48 : 58, Math.round(64 * compactScale * (previewExpanded && isShortScreen ? 0.88 : 1)));
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -264,12 +300,14 @@ export default function BrowseDecksScreen() {
     return () => clearTimeout(timer);
   }, [carouselItemWidth, selectedIndex]);
 
-  function openDeck(preview?: DeckPreview) {
+  function openDeck(preview?: DeckPreview, initialCardId?: string, initialCardIndex?: number) {
     if (!preview || preview.cards.length === 0) return;
     router.push({
       pathname: '/review/[deckId]',
       params: {
         deckId: preview.deck.id,
+        ...(initialCardId ? { initialCardId } : {}),
+        ...(typeof initialCardIndex === 'number' ? { initialCardIndex: String(initialCardIndex) } : {}),
         ...(preview.cardSearchQuery ? { cardSearch: preview.cardSearchQuery } : {}),
         ...(trimmedSearchQuery ? { browseSearchLabel: trimmedSearchQuery } : {}),
       },
@@ -281,7 +319,12 @@ export default function BrowseDecksScreen() {
   }
 
   return (
-    <ImageBackground source={folioReviewAssets.background.pagePaper} resizeMode="cover" style={styles.screen}>
+    <ImageBackground
+      accessibilityLabel="Browse decks screen"
+      testID="browse-decks-screen"
+      source={folioReviewAssets.background.pagePaper}
+      resizeMode="cover"
+      style={styles.screen}>
       <SafeAreaView style={styles.safeArea}>
         <View
           style={[
@@ -296,11 +339,18 @@ export default function BrowseDecksScreen() {
             <View pointerEvents="none" style={styles.wordmarkCenter}>
               <Image source={folioReviewAssets.header.folioWordmark} resizeMode="contain" style={styles.folioWordmark} />
             </View>
-            <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.push('/review')} style={styles.backPressable}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Back to Review Due Cards" testID="browse-decks-back" onPress={() => router.push('/review')} style={styles.backPressable}>
               <Image source={folioReviewAssets.header.back} resizeMode="contain" style={styles.backButton} />
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Review due cards" onPress={() => router.push('/review')} style={styles.reviewDuePressable}>
-              <Image source={browseDeckAssets.reviewDueCardsButton} resizeMode="contain" style={styles.reviewDueImage} />
+            <Pressable accessibilityRole="button" accessibilityLabel="Review due cards" testID="browse-decks-review-due" onPress={() => router.push('/review')} style={[
+                styles.reviewDuePressable,
+                { height: Math.max(48, reviewDueButtonHeight + 2), right: reviewDueButtonRight, width: reviewDueButtonWidth },
+              ]}>
+              <Image
+                source={browseDeckAssets.reviewDueCardsButton}
+                resizeMode="contain"
+                style={[styles.reviewDueImage, { height: reviewDueButtonHeight, width: reviewDueButtonWidth }]}
+              />
             </Pressable>
           </View>
 
@@ -309,15 +359,31 @@ export default function BrowseDecksScreen() {
             resizeMode="stretch"
             style={[styles.heroPanel, { height: heroHeight, width: contentWidth }]}
           >
-            <TextInput
-              accessibilityLabel="Search decks or cards"
-              autoCapitalize="none"
-              autoCorrect={false}
-              onChangeText={setSearchQuery}
-              placeholder=""
-              style={[styles.searchInput, searchQuery ? styles.searchInputFilled : null]}
-              value={searchQuery}
-            />
+            <View
+              style={[
+                styles.searchBar,
+                {
+                  borderRadius: Math.round(searchBarHeight / 2),
+                  bottom: Math.round(heroHeight * 0.1),
+                  height: searchBarHeight,
+                  paddingHorizontal: Math.round(searchBarHeight * 0.34),
+                  right: Math.round(contentWidth * 0.055),
+                  width: searchBarWidth,
+                },
+              ]}>
+              <Text allowFontScaling={false} style={[styles.searchIcon, { fontSize: searchIconSize, lineHeight: searchIconSize + 1, marginRight: Math.round(searchBarHeight * 0.18) }]}>⌕</Text>
+              <TextInput
+                accessibilityLabel="Search decks or cards"
+                testID="browse-decks-search-input"
+                autoCapitalize="none"
+                autoCorrect={false}
+                onChangeText={setSearchQuery}
+                placeholder={searchPlaceholder}
+                placeholderTextColor="#7B756E"
+                style={[styles.searchInput, { fontSize: searchFontSize, lineHeight: searchBarHeight }]}
+                value={searchQuery}
+              />
+            </View>
           </ImageBackground>
 
           {selectedPreview ? (
@@ -337,7 +403,7 @@ export default function BrowseDecksScreen() {
                   const nextIndex = Math.round(event.nativeEvent.contentOffset.x / carouselItemWidth);
                   selectDeck(nextIndex);
                 }}
-                style={[styles.carouselWindow, { width: contentWidth }]}
+                style={[styles.carouselWindow, { height: deckCarouselItemHeight, width: contentWidth }]}
               >
                 {deckPreviews.map((preview, index) => {
                   const active = index === selectedIndex;
@@ -353,6 +419,7 @@ export default function BrowseDecksScreen() {
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={active ? `Open ${preview.deck.name}` : `Select ${preview.deck.name}`}
+                      testID={active ? `browse-deck-open-${preview.deck.id}` : `browse-deck-select-${preview.deck.id}`}
                       key={preview.deck.id}
                       onPress={() => {
                         if (active) {
@@ -363,7 +430,7 @@ export default function BrowseDecksScreen() {
                       }}
                       style={({ pressed }) => [
                         styles.deckCarouselItem,
-                        { height: selectedDeckHeight + 14, width: carouselItemWidth },
+                        { height: deckCarouselItemHeight, width: carouselItemWidth },
                         pressed && styles.pressed,
                       ]}
                     >
@@ -375,21 +442,45 @@ export default function BrowseDecksScreen() {
                           {
                             height: cardHeight,
                             marginTop: active ? 0 : Math.round((selectedDeckHeight - sideDeckHeight) * 0.45),
+                            paddingHorizontal: Math.round(14 * deckContentScale),
+                            paddingTop: Math.round(17 * deckContentScale),
                             width: cardWidth,
                           },
                         ]}
                       >
-                        <Text allowFontScaling={false} numberOfLines={active ? 3 : 3} style={[styles.deckTitle, active ? styles.selectedDeckTitle : styles.sideDeckTitle]}>
+                        <Text
+                          allowFontScaling={false}
+                          numberOfLines={active ? 3 : 3}
+                          style={[
+                            styles.deckTitle,
+                            active ? styles.selectedDeckTitle : styles.sideDeckTitle,
+                            active
+                              ? {
+                                  fontSize: 18 * deckContentScale,
+                                  lineHeight: 23 * deckContentScale,
+                                  minHeight: 64 * deckContentScale,
+                                }
+                              : {
+                                  fontSize: 14 * deckContentScale,
+                                  lineHeight: 18 * deckContentScale,
+                                  minHeight: 50 * deckContentScale,
+                                },
+                          ]}>
                           {preview.deck.name}
                         </Text>
                         <Image
                           source={getDeckTopicIcon(preview.deck, preview.allCards)}
                           resizeMode="contain"
-                          style={active ? styles.selectedTopicIcon : styles.sideTopicIcon}
+                          style={[
+                            active ? styles.selectedTopicIcon : styles.sideTopicIcon,
+                            active
+                              ? { height: 72 * deckContentScale, marginBottom: 4 * deckContentScale, marginTop: 6 * deckContentScale, width: 82 * deckContentScale }
+                              : { height: 50 * deckContentScale, marginBottom: 4 * deckContentScale, marginTop: 4 * deckContentScale, width: 58 * deckContentScale },
+                          ]}
                         />
-                        <View style={[styles.deckCountBlock, active ? styles.selectedDeckCountBlock : null]}>
-                          <Text allowFontScaling={false} numberOfLines={1} style={styles.deckDueText}>{preview.dueCount} due now</Text>
-                          <Text allowFontScaling={false} numberOfLines={1} style={styles.deckTotalText}>{cardCount} total {cardLabel}</Text>
+                        <View style={[styles.deckCountBlock, active ? styles.selectedDeckCountBlock : null, { paddingBottom: (active ? 24 : 22) * deckContentScale }]}>
+                          <Text allowFontScaling={false} numberOfLines={1} style={[styles.deckDueText, { fontSize: 11 * deckContentScale, lineHeight: 15 * deckContentScale }]}>{preview.dueCount} due now</Text>
+                          <Text allowFontScaling={false} numberOfLines={1} style={[styles.deckTotalText, { fontSize: 10.5 * deckContentScale, lineHeight: 14 * deckContentScale }]}>{cardCount} total {cardLabel}</Text>
                         </View>
 
                       </ImageBackground>
@@ -407,6 +498,7 @@ export default function BrowseDecksScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={previewExpanded ? 'Hide card previews' : 'Show card previews'}
+                testID="browse-decks-toggle-card-previews"
                 onPress={() => setPreviewExpanded((value) => !value)}
                 style={({ pressed }) => [styles.previewHeader, { width: contentWidth, backgroundColor: selectedPreviewFill }, pressed && styles.pressed]}
               >
@@ -432,11 +524,13 @@ export default function BrowseDecksScreen() {
                 >
                   <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false} style={styles.previewScroll} contentContainerStyle={styles.previewList}>
                     {selectedCards.length > 0 ? (
-                      selectedCards.slice(0, 30).map((card) => (
+                      selectedCards.slice(0, 30).map((card, previewCardIndex) => (
                         <Pressable
                           accessibilityRole="button"
+                          accessibilityLabel={`Open card preview ${truncate(card.front, 36)}`}
+                          testID={`browse-card-preview-${card.id}`}
                           key={card.id}
-                          onPress={() => openDeck(selectedPreview)}
+                          onPress={() => openDeck(selectedPreview, card.id, previewCardIndex)}
                           style={({ pressed }) => [styles.previewRow, { minHeight: previewRowHeight }, pressed && styles.pressed]}
                         >
                           <Image source={folioReviewAssets.card.favoriteStar} resizeMode="contain" style={styles.previewStar} />
@@ -539,19 +633,29 @@ const styles = StyleSheet.create({
   heroPanel: {
     marginBottom: 8,
   },
+  searchBar: {
+    alignItems: 'center',
+    backgroundColor: '#FFF9EE',
+    borderColor: 'rgba(46, 131, 214, 0.58)',
+    borderWidth: 1,
+    flexDirection: 'row',
+    position: 'absolute',
+    zIndex: 4,
+  },
+  searchIcon: {
+    color: '#756F66',
+    fontSize: 17,
+    lineHeight: 19,
+    marginRight: 6,
+  },
   searchInput: {
     backgroundColor: 'transparent',
-    borderRadius: 18,
-    bottom: '13%',
     color: '#645F58',
+    flex: 1,
     fontFamily: FOLIO_HAND_FONT,
-    fontSize: 18,
-    left: '14%',
-    paddingHorizontal: 18,
+    fontSize: 13,
+    paddingHorizontal: 0,
     paddingVertical: 0,
-    position: 'absolute',
-    right: '6%',
-    top: '64%',
   },
   searchInputFilled: {
     backgroundColor: '#FBF6EA',

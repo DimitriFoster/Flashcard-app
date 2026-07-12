@@ -76,6 +76,9 @@ export default function RootLayout() {
           {/* Browse Decks mirrors the Review carousel without due-card filtering. */}
           <Stack.Screen name="review/browse" options={{ title: 'Browse Decks', headerShown: false }} />
 
+          {/* Stats has its own in-screen Back button, so hide the native Stack header. */}
+          <Stack.Screen name="review/stats" options={{ title: 'Stats', headerShown: false }} />
+
           {/* Notes has its own notebook-style header and save controls. */}
           <Stack.Screen name="notes/index" options={{ title: 'Notes', headerShown: false }} />
 

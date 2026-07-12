@@ -24,7 +24,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CrayonFill } from '@/components/ui/crayon-fill';
+import { HomePanelFill } from '@/components/home/home-panel-fill';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/design';
 import {
   deleteNotebook as deleteStoredNotebook,
@@ -38,6 +38,8 @@ import {
   saveNote,
 } from '@/storage/notes';
 import type { Notebook, StudyNote } from '@/types/note';
+
+const notesPanelSwatch = require('../../../assets/folio-ui/home-page/swatches/home_notes_panel_swatch.png');
 
 const NOTEBOOK_LINE_HEIGHT = 28;
 const NOTEBOOK_TEXT_TOP_PADDING = 47;
@@ -397,6 +399,12 @@ export default function NotesScreen() {
     ? Math.min(Math.max(keyboardHeight * 0.72, 128), 280)
     : 0;
   const editorBottomPadding = 38;
+
+  function normalizeEditorContentHeight(value: number) {
+    const safeValue = Number.isFinite(value) ? Math.max(value, NOTEBOOK_LINE_HEIGHT) : NOTEBOOK_LINE_HEIGHT;
+    return Math.ceil(safeValue / NOTEBOOK_LINE_HEIGHT) * NOTEBOOK_LINE_HEIGHT;
+  }
+
   const editorScrollContentHeight = Math.max(
     editorViewportHeight,
     editorContentHeight + editorBottomPadding + keyboardScrollPadding
@@ -474,7 +482,7 @@ export default function NotesScreen() {
     }
 
     requestAnimationFrame(() => {
-      keepCaretVisible(editorSelectionRef.current, bodyRef.current, { animated: true });
+      keepCaretVisible(editorSelectionRef.current, bodyRef.current, { animated: false });
     });
   }, [editorSurfaceHeight, editorViewportHeight, isEditorArmed, isKeyboardVisible, keyboardHeight]);
 
@@ -770,15 +778,25 @@ export default function NotesScreen() {
     editorScrollRef.current?.scrollTo({ y: nextY, animated: options.animated ?? true });
   }
 
+
   function handleEditorBodyChange(value: string) {
+    const previousBody = bodyRef.current;
+    const textGrew = value.length > previousBody.length;
+
     setDraftBody(value);
     scheduleAutoSave(value);
 
     /**
-     * Keep the caret above the keyboard without yanking the editor to the end.
+     * Keep the caret above the keyboard. When the user is actively adding text,
+     * bias toward pushing the note upward again instead of trapping the cursor
+     * under the keyboard.
      */
     requestAnimationFrame(() => {
-      keepCaretVisible(editorSelectionRef.current, value, { animated: true });
+      const targetSelection = textGrew
+        ? { start: value.length, end: value.length }
+        : editorSelectionRef.current;
+
+      keepCaretVisible(targetSelection, value, { animated: false });
     });
   }
 
@@ -1299,9 +1317,12 @@ export default function NotesScreen() {
                 ref={editorInputRef}
                 multiline
                 scrollEnabled={false}
-                onContentSizeChange={(event) =>
-                  setEditorContentHeight(event.nativeEvent.contentSize.height)
-                }
+                onContentSizeChange={(event) => {
+                  const nextHeight = normalizeEditorContentHeight(event.nativeEvent.contentSize.height);
+                  setEditorContentHeight((currentHeight) =>
+                    currentHeight === nextHeight ? currentHeight : nextHeight
+                  );
+                }}
                 editable={isEditorArmed}
                 pointerEvents={isEditorArmed ? 'auto' : 'none'}
                 showSoftInputOnFocus={isEditorArmed}
@@ -1316,7 +1337,7 @@ export default function NotesScreen() {
                   if (isKeyboardVisible) {
                     requestAnimationFrame(() => {
                       keepCaretVisible(nextSelection, bodyRef.current, {
-                        animated: true,
+                        animated: false,
                       });
                     });
                   }
@@ -1371,8 +1392,8 @@ export default function NotesScreen() {
         style={[
           styles.content,
           {
-            paddingTop: insets.top + 18,
-            paddingBottom: insets.bottom + 18,
+            paddingTop: Math.max(insets.top - 2, 0),
+            paddingBottom: insets.bottom + 14,
           },
         ]}>
         <View style={styles.topBar}>
@@ -1384,21 +1405,16 @@ export default function NotesScreen() {
           </Pressable>
 
           <View style={[styles.titleGroup, isKeyboardVisible && styles.titleGroupKeyboard]}>
-            {isKeyboardVisible ? (
-              <Text style={styles.titleKeyboard}>Editing note</Text>
-            ) : (
-              <>
-                <Text style={styles.eyebrow}>Notes</Text>
-                <Text style={styles.title}>Quick lined notebook</Text>
-              </>
-            )}
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78} style={styles.title}>
+              {isKeyboardVisible ? 'Editing Note' : 'Quick Notebook'}
+            </Text>
           </View>
 
           <Pressable
             accessibilityRole="button"
             onPress={saveCurrentNote}
             style={({ pressed }) => [styles.saveButton, pressed && styles.pressed]}>
-            <CrayonFill tone="note" variant="tight" opacity={0.82} />
+            <HomePanelFill source={notesPanelSwatch} opacity={1} />
             <Text style={styles.saveButtonText}>Save note</Text>
           </Pressable>
         </View>
@@ -1530,18 +1546,20 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: SPACING.md,
-    gap: SPACING.md,
+    gap: 8,
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: SPACING.sm,
-    paddingRight: Platform.OS === 'android' ? 44 : 0,
+    gap: 6,
+    marginTop: -6,
   },
   titleGroup: {
     flex: 1,
-    gap: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
   },
   titleGroupKeyboard: {
     gap: 0,
@@ -1560,13 +1578,15 @@ const styles = StyleSheet.create({
   },
   title: {
     color: COLORS.ink,
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 22,
+    lineHeight: 27,
+    fontWeight: '900',
+    textAlign: 'center',
   },
   homeButton: {
-    minHeight: 42,
+    minHeight: 38,
     borderRadius: RADIUS.md,
-    paddingHorizontal: 13,
+    paddingHorizontal: 11,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.panel,
@@ -1581,12 +1601,12 @@ const styles = StyleSheet.create({
   saveButton: {
     position: 'relative',
     overflow: 'hidden',
-    minHeight: 42,
+    minHeight: 38,
     borderRadius: RADIUS.md,
-    paddingHorizontal: 13,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.noteSoft,
+    backgroundColor: COLORS.notePaper,
     borderColor: COLORS.noteCrayon,
     borderWidth: 1,
   },
@@ -1597,8 +1617,8 @@ const styles = StyleSheet.create({
   },
   saveStatusPill: {
     alignSelf: 'flex-end',
-    marginTop: -6,
-    marginRight: Platform.OS === 'android' ? 44 : 0,
+    marginTop: -8,
+    marginRight: 0,
     borderRadius: RADIUS.pill,
     paddingHorizontal: 12,
     paddingVertical: 5,
@@ -2077,10 +2097,10 @@ const styles = StyleSheet.create({
   editorDeleteButton: {
     position: 'absolute',
     top: 10,
-    right: 10,
+    right: 7,
     zIndex: 10,
-    width: 34,
-    height: 34,
+    width: 32,
+    height: 32,
     borderRadius: RADIUS.sm,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2099,7 +2119,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     paddingTop: NOTEBOOK_TEXT_TOP_PADDING,
     paddingLeft: 24,
-    paddingRight: 54,
+    paddingRight: 24,
     fontSize: 17,
     lineHeight: NOTEBOOK_LINE_HEIGHT,
     fontWeight: '500',

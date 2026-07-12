@@ -1,8 +1,11 @@
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import React, { useRef, useState } from 'react';
-import { Image, Pressable, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { HomePanelFill } from '@/components/home/home-panel-fill';
 import { getDeckTopicIcon } from '@/lib/deck-topic';
+import { parseCardImportText } from '@/lib/import-parser';
 import type { ImportAppBackupResult, ImportCardsOptions, ImportCardsResult } from '@/storage/flashcards';
 import type { ParsedImportCard } from '@/lib/import-parser';
 import type { Deck, Flashcard, NewFlashcard } from '@/types/flashcard';
@@ -29,6 +32,12 @@ const pickSelectedCheck = require('../../../assets/folio-ui/home-page/open-pick/
 const pickUnselectedRadio = require('../../../assets/folio-ui/home-page/open-pick/pick_unselected_radio.png');
 const pickMagicWand = require('../../../assets/folio-ui/home-page/open-pick/pick_magic_wand.png');
 
+const createCardDeckIcon = require('../../../assets/folio-ui/home-page/create-card/create_card_deck_stack.png');
+const createCardFrontIcon = require('../../../assets/folio-ui/home-page/create-card/create_card_front_a.png');
+const createCardBackIcon = require('../../../assets/folio-ui/home-page/create-card/create_card_back_b.png');
+const createCardCaretDown = require('../../../assets/folio-ui/home-page/create-card/create_card_caret_down.png');
+const createCardAddIcon = require('../../../assets/folio-ui/home-page/create-card/create_card_add_stack.png');
+
 type DeleteDeckResult = {
   deck: Deck;
   deletedCards: number;
@@ -50,23 +59,32 @@ type HomeCreateSectionProps = {
   onImportBackup: (rawText: string) => ImportAppBackupResult | undefined;
 };
 
-type CreateOption = 'new' | 'import' | 'pick';
+type CreateOption = 'card' | 'new' | 'import' | 'pick';
 
 export function HomeCreateSection({
   decks,
   cards,
   selectedDeck,
   onCreateDeck,
+  onCreateCard,
   onSelectDeckId,
+  onImportCards,
+  onImportBackup,
 }: HomeCreateSectionProps) {
-  const [showCreateDetails, setShowCreateDetails] = useState(true);
-  const [selectedOption, setSelectedOption] = useState<CreateOption>('new');
+  const [showCreateDetails, setShowCreateDetails] = useState(false);
+  const [selectedOption, setSelectedOption] = useState<CreateOption>('card');
   const [localSelectedDeckId, setLocalSelectedDeckId] = useState('');
+  const [createCardDeckId, setCreateCardDeckId] = useState('');
+  const [cardFront, setCardFront] = useState('');
+  const [cardBack, setCardBack] = useState('');
   const [deckName, setDeckName] = useState('');
+  const [importText, setImportText] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedPickDeckId = localSelectedDeckId || selectedDeck?.id || decks[0]?.id || '';
+  const selectedCreateCardDeckId = createCardDeckId || selectedPickDeckId;
+  const selectedCreateCardDeck = decks.find((deck) => deck.id === selectedCreateCardDeckId);
 
   function showStatus(message: string) {
     setStatusMessage(message);
@@ -81,11 +99,11 @@ export function HomeCreateSection({
   }
 
   function returnToDefaultCreatePanel() {
-    setSelectedOption('new');
+    setSelectedOption('card');
   }
 
   function handleHeaderPress() {
-    if (selectedOption === 'import' || selectedOption === 'pick') {
+    if (selectedOption !== 'card') {
       returnToDefaultCreatePanel();
       return;
     }
@@ -94,11 +112,6 @@ export function HomeCreateSection({
   }
 
   function createDeck() {
-    if (selectedOption !== 'new') {
-      showStatus(selectedOption === 'import' ? 'Import deck picker comes next' : 'Pick a deck first');
-      return;
-    }
-
     const name = deckName.trim();
     if (!name) {
       showStatus('Enter a deck title first');
@@ -113,16 +126,144 @@ export function HomeCreateSection({
 
     onSelectDeckId(deck.id);
     setLocalSelectedDeckId(deck.id);
+    setCreateCardDeckId(deck.id);
     setDeckName('');
+    setSelectedOption('card');
     showStatus(`Deck created: ${deck.name} ✓`);
   }
 
+  function cycleCreateCardDeck() {
+    if (!decks.length) {
+      showStatus('Create or import a deck first');
+      return;
+    }
+
+    const currentIndex = decks.findIndex((deck) => deck.id === selectedCreateCardDeckId);
+    const nextDeck = decks[(currentIndex + 1 + decks.length) % decks.length] ?? decks[0];
+    setCreateCardDeckId(nextDeck.id);
+    setLocalSelectedDeckId(nextDeck.id);
+    onSelectDeckId(nextDeck.id);
+  }
+
+  function createCard() {
+    const deckId = selectedCreateCardDeckId;
+    const front = cardFront.trim();
+    const back = cardBack.trim();
+
+    if (!deckId) {
+      showStatus('Choose a deck first');
+      return;
+    }
+
+    if (!front || !back) {
+      showStatus('Add both front and back text');
+      return;
+    }
+
+    const card = onCreateCard({ deckId, front, back });
+    if (!card) {
+      showStatus('Could not create card');
+      return;
+    }
+
+    setCardFront('');
+    setCardBack('');
+    showStatus('Card created ✓');
+  }
+
+  function importCardRowsFromText(rawText: string, fallbackDeckName = 'Imported Deck') {
+    const parsed = parseCardImportText(rawText);
+
+    if (!parsed.cards.length) {
+      showStatus(parsed.warnings[0] ?? 'No importable card rows found');
+      return false;
+    }
+
+    const firstDeckName = parsed.cards.find((card) => card.deckName)?.deckName;
+    const result = onImportCards(parsed.cards, {
+      mode: 'newDeck',
+      newDeckName: firstDeckName || fallbackDeckName,
+      skipDuplicates: true,
+    });
+
+    const deckId = result.createdDeck?.id ?? result.decks[0]?.id;
+    if (deckId) {
+      setLocalSelectedDeckId(deckId);
+      setCreateCardDeckId(deckId);
+      onSelectDeckId(deckId);
+    }
+
+    setImportText('');
+    setSelectedOption('card');
+    showStatus(`Imported ${result.importedCards} cards ✓`);
+    return true;
+  }
+
   function beginImportDeck() {
-    showStatus('Import deck picker comes next');
+    importCardRowsFromText(importText);
+  }
+
+  async function chooseImportFile() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        copyToCacheDirectory: true,
+        multiple: false,
+        type: [
+          'text/*',
+          'text/csv',
+          'application/csv',
+          'application/json',
+          'application/vnd.ms-excel',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ],
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const asset = result.assets?.[0];
+      if (!asset?.uri) {
+        showStatus('Could not read selected file');
+        return;
+      }
+
+      const fileName = asset.name || 'Imported Deck';
+      const lowerName = fileName.toLowerCase();
+
+      if (lowerName.endsWith('.xlsx')) {
+        showStatus('XLSX binary import is not wired yet. Export CSV for now.');
+        return;
+      }
+
+      const rawText = await FileSystem.readAsStringAsync(asset.uri);
+
+      if (lowerName.endsWith('.foliopack') || lowerName.endsWith('.json')) {
+        const backupResult = onImportBackup(rawText);
+        if (backupResult) {
+          const deckId = backupResult.decks[0]?.id ?? '';
+          if (deckId) {
+            setLocalSelectedDeckId(deckId);
+            setCreateCardDeckId(deckId);
+            onSelectDeckId(deckId);
+          }
+          setImportText('');
+          setSelectedOption('card');
+          showStatus('Backup imported ✓');
+          return;
+        }
+      }
+
+      const fallbackDeckName = fileName.replace(/\.[^/.]+$/, '') || 'Imported Deck';
+      importCardRowsFromText(rawText, fallbackDeckName);
+    } catch {
+      showStatus('Could not import that file');
+    }
   }
 
   function chooseDeck(deckId: string) {
     setLocalSelectedDeckId(deckId);
+    setCreateCardDeckId(deckId);
     onSelectDeckId(deckId);
   }
 
@@ -138,11 +279,13 @@ export function HomeCreateSection({
     }
 
     onSelectDeckId(deck.id);
+    setCreateCardDeckId(deck.id);
+    setSelectedOption('card');
     showStatus(`Selected deck: ${deck.name} ✓`);
   }
 
   const options: Array<{
-    id: CreateOption;
+    id: Exclude<CreateOption, 'card'>;
     title: string;
     subtitle: string;
     icon: any;
@@ -184,13 +327,21 @@ export function HomeCreateSection({
             actionIcon: pickCaretUp,
             arrowStyle: styles.topArrowUp,
           }
-        : {
-            icon: createCirclePencil,
-            title: 'create',
-            subtitle: 'Choose a deck or start\na new one.',
-            actionIcon: createCaretDown,
-            arrowStyle: styles.topArrow,
-          };
+        : selectedOption === 'new'
+          ? {
+              icon: createNewDeckIcon,
+              title: 'New deck',
+              subtitle: 'Start a blank deck\nfrom scratch.',
+              actionIcon: pickCaretUp,
+              arrowStyle: styles.topArrowUp,
+            }
+          : {
+              icon: createCirclePencil,
+              title: 'create',
+              subtitle: 'Choose a deck or start\na new one.',
+              actionIcon: createCaretDown,
+              arrowStyle: styles.topArrow,
+            };
 
   if (!showCreateDetails) {
     return (
@@ -216,30 +367,108 @@ export function HomeCreateSection({
     );
   }
 
+  function renderOptionCards() {
+    return (
+      <View style={styles.optionRow}>
+        {options.map((option) => {
+          const active = option.id === selectedOption;
+          return (
+            <Pressable
+              key={option.id}
+              accessibilityRole="button"
+              onPress={() => setSelectedOption(option.id)}
+              style={({ pressed }) => [styles.optionCard, active && styles.optionCardActive, pressed && styles.pressed]}>
+              <Image source={option.icon} style={styles.optionIcon} resizeMode="contain" />
+              <Text style={styles.optionTitle}>{option.title}</Text>
+              <Text style={styles.optionSubtitle}>{option.subtitle}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  }
+
+  function renderCreateCardPanel() {
+    return (
+      <View style={styles.body}>
+        <View style={styles.caretWrap}>
+          <Image source={createCaretDown} style={styles.caretIcon} resizeMode="contain" />
+        </View>
+
+        <Text style={styles.sectionHeading}>CREATE A CARD</Text>
+        <Text style={styles.sectionIntro}>Quickly add a flashcard to an existing deck.</Text>
+
+        <View style={styles.createCardBox}>
+          <View style={styles.createCardRow}>
+            <Image source={createCardDeckIcon} style={styles.createCardRowIcon} resizeMode="contain" />
+            <Text style={styles.createCardLabel}>Deck</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={cycleCreateCardDeck}
+              style={({ pressed }) => [styles.createCardDeckPicker, pressed && styles.pressed]}>
+              <Text numberOfLines={1} style={styles.createCardDeckText}>
+                {selectedCreateCardDeck?.name ?? 'Choose a deck'}
+              </Text>
+              <Image source={createCardCaretDown} style={styles.createCardPickerIcon} resizeMode="contain" />
+            </Pressable>
+          </View>
+
+          <View style={styles.createCardRow}>
+            <Image source={createCardFrontIcon} style={styles.createCardRowIcon} resizeMode="contain" />
+            <Text style={styles.createCardLabel}>Front</Text>
+            <TextInput
+              placeholder="Front of card"
+              placeholderTextColor="#8A8E84"
+              value={cardFront}
+              onChangeText={setCardFront}
+              style={styles.createCardInput}
+              returnKeyType="next"
+            />
+          </View>
+
+          <View style={styles.createCardRow}>
+            <Image source={createCardBackIcon} style={styles.createCardRowIcon} resizeMode="contain" />
+            <Text style={styles.createCardLabel}>Back</Text>
+            <TextInput
+              placeholder="Back of card"
+              placeholderTextColor="#8A8E84"
+              value={cardBack}
+              onChangeText={setCardBack}
+              style={styles.createCardInput}
+              returnKeyType="done"
+              onSubmitEditing={createCard}
+            />
+          </View>
+
+          <View style={styles.createCardActionRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={createCard}
+              style={({ pressed }) => [styles.createCardButton, pressed && styles.pressed]}>
+              <Text style={styles.createCardButtonText}>Create card</Text>
+              <Image source={createCardAddIcon} style={styles.createCardButtonIcon} resizeMode="contain" />
+            </Pressable>
+          </View>
+        </View>
+
+        {renderOptionCards()}
+
+        <View style={styles.bodyDivider} />
+
+        <Text style={styles.tipText}>💡 Tap <Text style={styles.tipStrong}>New deck</Text> to open deck setup.</Text>
+      </View>
+    );
+  }
+
   function renderNewDeckPanel() {
     return (
       <View style={styles.body}>
-        <Text style={styles.sectionHeading}>CREATE A NEW DECK</Text>
-        <Text style={styles.sectionIntro}>Start from scratch, import, or use a template.</Text>
-
-        <View style={styles.optionRow}>
-          {options.map((option) => {
-            const active = option.id === selectedOption;
-            return (
-              <Pressable
-                key={option.id}
-                accessibilityRole="button"
-                onPress={() => setSelectedOption(option.id)}
-                style={({ pressed }) => [styles.optionCard, active && styles.optionCardActive, pressed && styles.pressed]}>
-                <Image source={option.icon} style={styles.optionIcon} resizeMode="contain" />
-                <Text style={styles.optionTitle}>{option.title}</Text>
-                <Text style={styles.optionSubtitle}>{option.subtitle}</Text>
-              </Pressable>
-            );
-          })}
+        <View style={styles.caretWrap}>
+          <Image source={createCaretDown} style={styles.caretIcon} resizeMode="contain" />
         </View>
 
-        <View style={styles.bodyDivider} />
+        <Text style={styles.sectionHeading}>CREATE A NEW DECK</Text>
+        <Text style={styles.sectionIntro}>Start from scratch, then add cards from the Create panel.</Text>
 
         <Text style={styles.fieldLabel}>Deck title</Text>
 
@@ -275,16 +504,27 @@ export function HomeCreateSection({
     return (
       <View style={styles.importBody}>
         <Text style={styles.importHeading}>IMPORT A DECK</Text>
-        <Text style={styles.importIntro}>Bring your existing cards into Folio.</Text>
+        <Text style={styles.importIntro}>Paste CSV, TSV, or simple text rows to bring cards into Folio.</Text>
 
-        <Pressable
-          accessibilityRole="button"
-          onPress={beginImportDeck}
-          style={({ pressed }) => [styles.importDropZone, pressed && styles.pressed]}>
+        <View style={styles.importDropZone}>
           <Image source={importLargeFileBox} style={styles.importLargeIcon} resizeMode="contain" />
-          <Text style={styles.importDropTitle}>Drop a file or choose one</Text>
-          <Text style={styles.importDropText}>Drag & drop anywhere in this area{`\n`}or tap to browse.</Text>
-        </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={chooseImportFile}
+            style={({ pressed }) => [styles.importChooseFileButton, pressed && styles.pressed]}>
+            <Text style={styles.importChooseFileText}>Choose file from phone</Text>
+          </Pressable>
+          <Text style={styles.importDropTitle}>Or paste card rows here</Text>
+          <TextInput
+            multiline
+            value={importText}
+            onChangeText={setImportText}
+            placeholder={`front,back\nWhat is RAG?,Retrieval augmented generation`}
+            placeholderTextColor="#7E8778"
+            textAlignVertical="top"
+            style={styles.importTextInput}
+          />
+        </View>
 
         <View style={styles.importDividerRow}>
           <View style={styles.importDividerLine} />
@@ -295,7 +535,7 @@ export function HomeCreateSection({
         </View>
 
         <View style={styles.supportedRow}>
-          <Text style={styles.supportedText}>Supported files: .foliopack, .csv, .txt, .xlsx</Text>
+          <Text style={styles.supportedText}>Supported files: .csv, .tsv, .txt, .json, .foliopack</Text>
           <Text style={styles.infoIcon}>ⓘ</Text>
         </View>
 
@@ -307,7 +547,7 @@ export function HomeCreateSection({
           <Image source={importMagicWand} style={styles.importButtonIcon} resizeMode="contain" />
         </Pressable>
 
-        <Pressable accessibilityRole="button" onPress={() => showStatus('Import help comes next')}>
+        <Pressable accessibilityRole="button" onPress={() => showStatus('Rows can use front/back headers or two columns')}>
           <Text style={styles.importLearnLink}>Learn how import works</Text>
         </Pressable>
       </View>
@@ -323,9 +563,15 @@ export function HomeCreateSection({
 
         <Text style={styles.pickHeading}>AVAILABLE DECKS</Text>
 
-        <View style={styles.pickList}>
-          {decks.length ? (
-            decks.slice(0, 4).map((deck) => {
+        {decks.length ? (
+          <ScrollView
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={decks.length > 4}
+            style={styles.pickListScroll}
+            contentContainerStyle={styles.pickList}
+          >
+            {decks.map((deck) => {
               const deckCards = cards.filter((card) => card.deckId === deck.id);
               const active = deck.id === selectedPickDeckId;
 
@@ -333,6 +579,7 @@ export function HomeCreateSection({
                 <Pressable
                   key={deck.id}
                   accessibilityRole="button"
+                  accessibilityLabel={`Select ${deck.name}`}
                   onPress={() => chooseDeck(deck.id)}
                   style={({ pressed }) => [
                     styles.pickDeckRow,
@@ -355,14 +602,14 @@ export function HomeCreateSection({
                   />
                 </Pressable>
               );
-            })
-          ) : (
-            <View style={styles.pickEmptyState}>
-              <Text style={styles.pickDeckTitle}>No decks yet</Text>
-              <Text style={styles.pickDeckCount}>Create or import a deck first.</Text>
-            </View>
-          )}
-        </View>
+            })}
+          </ScrollView>
+        ) : (
+          <View style={styles.pickEmptyState}>
+            <Text style={styles.pickDeckTitle}>No decks yet</Text>
+            <Text style={styles.pickDeckCount}>Create or import a deck first.</Text>
+          </View>
+        )}
 
         <View style={styles.pickDividerRow}>
           <View style={styles.pickDividerLineShort} />
@@ -377,32 +624,6 @@ export function HomeCreateSection({
           <Text style={styles.pickUseButtonText}>Use selected deck</Text>
           <Image source={pickMagicWand} style={styles.pickUseButtonIcon} resizeMode="contain" />
         </Pressable>
-      </View>
-    );
-  }
-
-  function renderTemplatePanel() {
-    return (
-      <View style={styles.body}>
-        <Text style={styles.sectionHeading}>PICK A DECK</Text>
-        <Text style={styles.sectionIntro}>Choose an existing deck to get started.</Text>
-
-        <View style={styles.optionRow}>
-          {options.map((option) => {
-            const active = option.id === selectedOption;
-            return (
-              <Pressable
-                key={option.id}
-                accessibilityRole="button"
-                onPress={() => setSelectedOption(option.id)}
-                style={({ pressed }) => [styles.optionCard, active && styles.optionCardActive, pressed && styles.pressed]}>
-                <Image source={option.icon} style={styles.optionIcon} resizeMode="contain" />
-                <Text style={styles.optionTitle}>{option.title}</Text>
-                <Text style={styles.optionSubtitle}>{option.subtitle}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
       </View>
     );
   }
@@ -431,20 +652,10 @@ export function HomeCreateSection({
 
       <View style={styles.divider} />
 
-      {selectedOption === 'new' ? (
-        <>
-          <View style={styles.caretWrap}>
-            <Image source={createCaretDown} style={styles.caretIcon} resizeMode="contain" />
-          </View>
-          {renderNewDeckPanel()}
-        </>
-      ) : selectedOption === 'import' ? (
-        renderImportDeckPanel()
-      ) : selectedOption === 'pick' ? (
-        renderPickDeckPanel()
-      ) : (
-        renderTemplatePanel()
-      )}
+      {selectedOption === 'card' ? renderCreateCardPanel() : null}
+      {selectedOption === 'new' ? renderNewDeckPanel() : null}
+      {selectedOption === 'import' ? renderImportDeckPanel() : null}
+      {selectedOption === 'pick' ? renderPickDeckPanel() : null}
 
       {statusMessage ? (
         <View style={styles.statusMessage}>

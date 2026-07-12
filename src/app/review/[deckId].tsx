@@ -38,11 +38,16 @@ export default function DeckReviewScreen() {
     mode?: string | string[];
     cardSearch?: string | string[];
     browseSearchLabel?: string | string[];
+    initialCardId?: string | string[];
+    initialCardIndex?: string | string[];
   }>();
   const deckId = Array.isArray(params.deckId) ? params.deckId[0] : params.deckId;
   const mode = Array.isArray(params.mode) ? params.mode[0] : params.mode;
   const cardSearch = Array.isArray(params.cardSearch) ? params.cardSearch[0] : params.cardSearch;
   const browseSearchLabel = Array.isArray(params.browseSearchLabel) ? params.browseSearchLabel[0] : params.browseSearchLabel;
+  const initialCardId = Array.isArray(params.initialCardId) ? params.initialCardId[0] : params.initialCardId;
+  const rawInitialCardIndex = Array.isArray(params.initialCardIndex) ? params.initialCardIndex[0] : params.initialCardIndex;
+  const requestedInitialCardIndex = rawInitialCardIndex !== undefined ? Number(rawInitialCardIndex) : -1;
   const normalizedCardSearch = cardSearch?.trim().toLowerCase() ?? '';
   const isDueMode = mode === 'due';
 
@@ -123,15 +128,23 @@ export default function DeckReviewScreen() {
       const nextCards = loadCardsForCurrentMode();
       const totalCardsInDeck = deckId ? getFlashcardsByDeck(deckId).length : nextCards.length;
 
+      const requestedCardIndex = initialCardId
+        ? nextCards.findIndex((card) => card.id === initialCardId)
+        : -1;
+      const requestedFallbackIndex = Number.isInteger(requestedInitialCardIndex)
+        ? Math.min(Math.max(requestedInitialCardIndex, 0), Math.max(nextCards.length - 1, 0))
+        : -1;
+      const nextInitialIndex = requestedCardIndex >= 0 ? requestedCardIndex : requestedFallbackIndex >= 0 ? requestedFallbackIndex : 0;
+
       setDecks(nextDecks);
       setCards(nextCards);
       setTotalDeckCards(totalCardsInDeck);
-      setCurrentIndex(0);
+      setCurrentIndex(nextInitialIndex);
       setFlipped(false);
       setCanUndoReview(false);
       setIsEditing(false);
       translateX.setValue(0);
-    }, [loadCardsForCurrentMode, translateX])
+    }, [initialCardId, loadCardsForCurrentMode, requestedInitialCardIndex, translateX])
   );
 
   /**
@@ -180,6 +193,22 @@ export default function DeckReviewScreen() {
    */
   const animateCardOffscreen = useCallback(
     (direction: 'left' | 'right') => {
+      const cardCount = cardsLengthRef.current;
+
+      /**
+       * A filtered browse result can contain a single matching card. In that case
+       * there is no next card to swap in after the offscreen animation, so keep
+       * the same card visible and spring it back instead of letting the native
+       * animation appear to strand the card offscreen.
+       */
+      if (cardCount <= 1) {
+        Animated.spring(translateX, {
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+        return;
+      }
+
       Animated.timing(translateX, {
         toValue: direction === 'left' ? -500 : 500,
         duration: 180,

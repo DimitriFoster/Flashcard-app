@@ -107,6 +107,17 @@ If an animation makes the user pause before continuing, simplify it.
 
 ---
 
+## Responsive Layout Reference
+
+Before making responsive layout changes, read `Docs/responsive-mobile-ai-playbook.md`. It contains Folio-specific breakpoints, short-screen rules, safe-area rules, touch-target expectations, and AI workflow acceptance criteria.
+
+---
+
+
+## Maestro Testing Reference
+
+Before making larger layout or navigation changes, read `.maestro/README.md` and `Docs/maestro-workflow.md`. Round 71 added a dev-only `flashcardapp://maestro-seed` route and smoke flows under `.maestro/smoke/` so Folio can be tested from a deterministic deck/card state. Keep important PNG-only controls wrapped in real Pressables with stable `accessibilityLabel` and `testID` values so Maestro can tap them without relying on screen coordinates.
+
 ## Responsiveness Rules
 
 Perceived speed matters.

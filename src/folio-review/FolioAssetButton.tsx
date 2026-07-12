@@ -16,6 +16,7 @@ type Props = {
   style?: StyleProp<ViewStyle>;
   imageStyle?: StyleProp<ViewStyle>;
   disabled?: boolean;
+  testID?: string;
 };
 
 export function FolioAssetButton({
@@ -25,11 +26,13 @@ export function FolioAssetButton({
   style,
   imageStyle,
   disabled,
+  testID,
 }: Props) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      testID={testID}
       disabled={disabled}
       hitSlop={8}
       onPress={onPress}

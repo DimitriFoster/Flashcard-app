@@ -1,0 +1,19 @@
+appId: com.midlunch.Flashcardapp
+---
+- launchApp:
+    clearState: false
+- openLink: flashcardapp://maestro-seed
+- assertVisible: "Maestro test data ready"
+- tapOn:
+    id: "maestro-open-review-due-cards"
+- assertVisible:
+    id: "review-index-screen"
+- tapOn:
+    id: "review-index-review-deck-maestro-deck-ai-systems"
+- assertVisible:
+    id: "review-session-screen"
+- assertVisible: "What does RAG add to an AI assistant?"
+- tapOn:
+    id: "grade-good"
+- assertVisible:
+    id: "review-session-screen"
