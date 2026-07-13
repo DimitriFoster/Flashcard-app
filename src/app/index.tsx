@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,8 +24,17 @@ import type { ParsedImportCard } from '@/lib/import-parser';
 
 const heroCardsImage = require('../../assets/folio-ui/home-page/home_hero_cards.png');
 
+function normalizeParam(value?: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    createDeckId?: string | string[];
+    openCreateCard?: string | string[];
+    createRequestId?: string | string[];
+  }>();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [decks, setDecks] = useState<Deck[]>([]);
@@ -34,6 +43,9 @@ export default function HomeScreen() {
 
   const isTabletLayout = width >= 600;
   const tabletPageWidth = Math.min(width - 96, 560);
+  const requestedCreateDeckId = normalizeParam(params.createDeckId);
+  const openCreateCardOnMount = normalizeParam(params.openCreateCard) === '1';
+  const createCardRequestKey = normalizeParam(params.createRequestId);
 
   const selectedDeck = useMemo(
     () => decks.find((deck) => deck.id === selectedDeckId),
@@ -45,10 +57,14 @@ export default function HomeScreen() {
 
     setDecks(nextDecks);
     setCards(getFlashcards());
-    setSelectedDeckId((previousDeckId) =>
-      nextDecks.some((deck) => deck.id === previousDeckId) ? previousDeckId : ''
-    );
-  }, []);
+    setSelectedDeckId((previousDeckId) => {
+      if (requestedCreateDeckId && nextDecks.some((deck) => deck.id === requestedCreateDeckId)) {
+        return requestedCreateDeckId;
+      }
+
+      return nextDecks.some((deck) => deck.id === previousDeckId) ? previousDeckId : '';
+    });
+  }, [requestedCreateDeckId]);
 
   function createDeck(name: string) {
     const deck = addDeck({ name });
@@ -136,6 +152,9 @@ export default function HomeScreen() {
           cards={cards}
           selectedDeck={selectedDeck}
           tabletLayout={isTabletLayout}
+          initialCreateDeckId={requestedCreateDeckId}
+          openCreateCardOnMount={openCreateCardOnMount}
+          createCardRequestKey={createCardRequestKey}
           onSelectDeckId={setSelectedDeckId}
           onCreateDeck={createDeck}
           onCreateCard={createCard}
@@ -144,6 +163,9 @@ export default function HomeScreen() {
           onImportCards={importCards}
           onExportBackup={exportAppBackupText}
           onImportBackup={importBackup}
+          onBrowseDeck={(deckId) =>
+            router.push({ pathname: '/review/browse', params: { deckId } })
+          }
         />
 
         <HomeReviewSection onPressReview={() => router.push('/review')} tabletLayout={isTabletLayout} />

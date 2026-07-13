@@ -22,15 +22,20 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { HomePanelFill } from '@/components/home/home-panel-fill';
 import { FOLIO_HAND_FONT } from '@/folio-review/folioFonts';
 import { folioReviewAssets } from '@/folio-review/folioReviewAssets';
-import { getDecks, getFlashcards } from '@/storage/flashcards';
-import type { Deck, Flashcard } from '@/types/flashcard';
+import { getDecks, getFlashcards, getReviewLogs } from '@/storage/flashcards';
+import type { Deck, Flashcard, ReviewLog } from '@/types/flashcard';
+import { getDueCards } from '../../lib/review-queue';
 
 const browseDeckAssets = {
   heroPanel: require('../../../assets/folio-ui/browse-selection/panels/browse_hero_panel_transparent_round66.png'),
   reviewDueCardsButton: require('../../../assets/folio-ui/browse-selection/header/review_due_cards_button_round22_padded.png'),
   openDeckButton: require('../../../assets/folio-ui/browse-selection/cards/open_deck_button_mockup_round22.png'),
+  createPanelSwatch: require('../../../assets/folio-ui/home-page/open-create/open_create_panel_swatch.png'),
+  createCirclePencil: require('../../../assets/folio-ui/home-page/open-create/create_circle_pencil.png'),
+  createArrowRight: require('../../../assets/folio-ui/home-page/open-create/create_arrow_right.png'),
   previewCollapsedPanels: [
     require('../../../assets/folio-ui/browse-selection/panels/preview_cards_collapsed_panel_blue_round22.png'),
     require('../../../assets/folio-ui/browse-selection/panels/preview_cards_collapsed_panel_green_round22.png'),
@@ -116,13 +121,6 @@ function getCardsForDeck(deckId: string, cards: Flashcard[]) {
   return cards.filter((card) => card.deckId === deckId);
 }
 
-function isCardDue(card: Flashcard) {
-  if (card.state === 'suspended') return false;
-  if (!card.dueAt) return true;
-  const dueTime = Date.parse(card.dueAt);
-  return Number.isNaN(dueTime) || dueTime <= Date.now();
-}
-
 function truncate(text: string, maxLength: number) {
   const clean = text.replace(/\s+/g, ' ').trim();
   if (clean.length <= maxLength) return clean;
@@ -143,16 +141,21 @@ function clamp(value: number, min: number, max: number) {
 
 export default function BrowseDecksScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ q?: string | string[] }>();
+  const params = useLocalSearchParams<{
+    q?: string | string[];
+    deckId?: string | string[];
+  }>();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const carouselRef = useRef<ScrollView | null>(null);
   const initializedSelectionRef = useRef(false);
 
   const routeSearchQuery = normalizeParam(params.q);
+  const routeDeckId = normalizeParam(params.deckId);
 
   const [decks, setDecks] = useState<Deck[]>([]);
   const [cards, setCards] = useState<Flashcard[]>([]);
+  const [reviewLogs, setReviewLogs] = useState<ReviewLog[]>([]);
   const [searchQuery, setSearchQuery] = useState(routeSearchQuery ?? '');
   const [selectedIndex, setSelectedIndex] = useState(1);
   const [previewExpanded, setPreviewExpanded] = useState(false);
@@ -161,6 +164,7 @@ export default function BrowseDecksScreen() {
     useCallback(() => {
       setDecks(getDecks());
       setCards(getFlashcards());
+      setReviewLogs(getReviewLogs());
     }, [])
   );
 
@@ -193,7 +197,7 @@ export default function BrowseDecksScreen() {
           deck,
           allCards,
           cards: visibleCards,
-          dueCount: allCards.filter(isCardDue).length,
+          dueCount: getDueCards(allCards, { reviewLogs }).length,
           cardSearchQuery,
         };
       })
@@ -204,15 +208,29 @@ export default function BrowseDecksScreen() {
       );
 
     return next.sort((a, b) => scoreDeck(a.deck) - scoreDeck(b.deck));
-  }, [cards, decks, normalizedSearchQuery, trimmedSearchQuery]);
+  }, [cards, decks, normalizedSearchQuery, reviewLogs, trimmedSearchQuery]);
 
   const preferredIndex = useMemo(() => {
+    const routedDeckIndex = deckPreviews.findIndex((preview) => preview.deck.id === routeDeckId);
+    if (routedDeckIndex >= 0) return routedDeckIndex;
+
     const aiIndex = deckPreviews.findIndex((preview) =>
       preview.deck.name.toLowerCase().includes('ai systems')
     );
     if (aiIndex >= 0) return aiIndex;
     return Math.min(1, Math.max(0, deckPreviews.length - 1));
-  }, [deckPreviews]);
+  }, [deckPreviews, routeDeckId]);
+
+  useEffect(() => {
+    if (!routeDeckId) return;
+
+    const routedDeckIndex = deckPreviews.findIndex((preview) => preview.deck.id === routeDeckId);
+    if (routedDeckIndex < 0) return;
+
+    initializedSelectionRef.current = true;
+    setSelectedIndex(routedDeckIndex);
+    setPreviewExpanded(false);
+  }, [deckPreviews, routeDeckId]);
 
   useEffect(() => {
     if (deckPreviews.length === 0) {
@@ -270,6 +288,8 @@ export default function BrowseDecksScreen() {
   const previewWindowHeight = previewExpanded
     ? Math.round(clamp(safeHeight * (isShortScreen ? 0.18 : 0.22), isVeryShortScreen ? 108 : 128, isShortScreen ? 150 : 210))
     : Math.round(Math.min(210, Math.max(168, safeHeight * 0.22)));
+  const createCardsButtonHeight = Math.round(clamp(72 * compactScale, 58, 72) * 0.8);
+  const createCardsButtonWidth = Math.round(contentWidth * 0.8);
   const fixedVerticalSpace =
     30 +
     headerHeight +
@@ -279,12 +299,14 @@ export default function BrowseDecksScreen() {
     25 +
     62 +
     10 +
-    (previewExpanded ? previewWindowHeight + 8 : 0) +
+    (previewExpanded ? previewWindowHeight + 8 : createCardsButtonHeight + 8) +
     Math.max(8, insets.bottom + 4);
   const availableCarouselHeight = Math.max(118, safeHeight - fixedVerticalSpace);
-  const deckFitScale = previewExpanded
-    ? clamp((availableCarouselHeight - 14) / Math.max(1, baseSelectedDeckHeight), isVeryShortScreen ? 0.66 : 0.72, 1)
-    : 1;
+  const deckFitScale = clamp(
+    (availableCarouselHeight - 14) / Math.max(1, baseSelectedDeckHeight),
+    isVeryShortScreen ? 0.66 : 0.72,
+    1,
+  );
   const selectedDeckWidth = Math.round(baseSelectedDeckWidth * deckFitScale);
   const selectedDeckHeight = Math.round(baseSelectedDeckHeight * deckFitScale);
   const sideDeckWidth = Math.round(baseSideDeckWidth * deckFitScale);
@@ -316,6 +338,19 @@ export default function BrowseDecksScreen() {
 
   function selectDeck(index: number) {
     setSelectedIndex(clamp(index, 0, deckPreviews.length - 1));
+  }
+
+  function createCardsForSelectedDeck() {
+    if (!selectedPreview) return;
+
+    router.push({
+      pathname: '/',
+      params: {
+        createDeckId: selectedPreview.deck.id,
+        openCreateCard: '1',
+        createRequestId: String(Date.now()),
+      },
+    });
   }
 
   return (
@@ -514,6 +549,42 @@ export default function BrowseDecksScreen() {
                   <Text allowFontScaling={false} style={styles.previewToggleGlyph}>{previewExpanded ? '⌃' : '⌄'}</Text>
                 </View>
               </Pressable>
+
+              {!previewExpanded ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Create cards for ${selectedPreview.deck.name}`}
+                  testID="browse-decks-create-cards-selected-deck"
+                  onPress={createCardsForSelectedDeck}
+                  style={({ pressed }) => [
+                    styles.createCardsButton,
+                    { height: createCardsButtonHeight, width: createCardsButtonWidth },
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <HomePanelFill source={browseDeckAssets.createPanelSwatch} opacity={1} />
+                  <View style={styles.createCardsButtonContent}>
+                    <Image
+                      source={browseDeckAssets.createCirclePencil}
+                      resizeMode="contain"
+                      style={styles.createCardsButtonIcon}
+                    />
+                    <View style={styles.createCardsButtonTextBlock}>
+                      <Text allowFontScaling={false} numberOfLines={1} style={styles.createCardsButtonTitle}>
+                        Create cards for this deck
+                      </Text>
+                      <Text allowFontScaling={false} numberOfLines={1} style={styles.createCardsButtonDeckName}>
+                        {selectedPreview.deck.name}
+                      </Text>
+                    </View>
+                    <Image
+                      source={browseDeckAssets.createArrowRight}
+                      resizeMode="contain"
+                      style={styles.createCardsButtonArrow}
+                    />
+                  </View>
+                </Pressable>
+              ) : null}
 
               {previewExpanded ? (
                 <ImageBackground
@@ -778,6 +849,48 @@ const styles = StyleSheet.create({
     minHeight: 62,
     overflow: 'hidden',
     position: 'relative',
+  },
+  createCardsButton: {
+    alignSelf: 'center',
+    backgroundColor: '#EAF8EA',
+    borderColor: '#5AAB62',
+    borderRadius: 15,
+    borderWidth: 1,
+    marginBottom: 2,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  createCardsButtonContent: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 7,
+    paddingHorizontal: 12,
+  },
+  createCardsButtonIcon: {
+    height: 36,
+    width: 36,
+  },
+  createCardsButtonTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  createCardsButtonTitle: {
+    color: '#0E6F20',
+    fontFamily: FOLIO_HAND_FONT,
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  createCardsButtonDeckName: {
+    color: '#3D3934',
+    fontFamily: FOLIO_HAND_FONT,
+    fontSize: 10.5,
+    lineHeight: 13,
+    marginTop: 0,
+  },
+  createCardsButtonArrow: {
+    height: 19,
+    width: 19,
   },
   previewSwatchFill: {
     ...StyleSheet.absoluteFillObject,

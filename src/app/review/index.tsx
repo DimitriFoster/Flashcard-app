@@ -23,8 +23,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { COLORS, RADIUS, SHADOWS, SPACING } from "@/constants/design";
-import { getDecks, getFlashcards } from "@/storage/flashcards";
-import type { Deck, Flashcard } from "@/types/flashcard";
+import { getDecks, getFlashcards, getReviewLogs } from "@/storage/flashcards";
+import type { Deck, Flashcard, ReviewLog } from "@/types/flashcard";
 import { getDueCards } from "../../lib/review-queue";
 
 const reviewDueAssets = {
@@ -175,6 +175,7 @@ export default function ReviewIndexScreen() {
   const { width, height } = useWindowDimensions();
   const [decks, setDecks] = useState<Deck[]>([]);
   const [cards, setCards] = useState<Flashcard[]>([]);
+  const [reviewLogs, setReviewLogs] = useState<ReviewLog[]>([]);
 
   const pageWidth = Math.min(width - SPACING.lg * 2, 430);
   const safeHeight = height - insets.top - insets.bottom;
@@ -217,7 +218,7 @@ export default function ReviewIndexScreen() {
     () =>
       decks.map((deck) => {
         const deckCards = getCardsForDeck(deck.id, cards);
-        const dueCards = getDueCards(deckCards);
+        const dueCards = getDueCards(deckCards, { reviewLogs });
 
         return {
           deck,
@@ -226,7 +227,7 @@ export default function ReviewIndexScreen() {
           mostRecentDueCard: getMostRecentCard(dueCards),
         };
       }),
-    [cards, decks],
+    [cards, decks, reviewLogs],
   );
 
   const dueDeckPreviews = useMemo(() => {
@@ -238,6 +239,7 @@ export default function ReviewIndexScreen() {
     useCallback(() => {
       setDecks(getDecks());
       setCards(getFlashcards());
+      setReviewLogs(getReviewLogs());
     }, []),
   );
 

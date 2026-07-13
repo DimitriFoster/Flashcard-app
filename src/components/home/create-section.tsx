@@ -1,6 +1,6 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { HomePanelFill } from '@/components/home/home-panel-fill';
@@ -58,6 +58,10 @@ type HomeCreateSectionProps = {
   onExportBackup: () => string;
   onImportBackup: (rawText: string) => ImportAppBackupResult | undefined;
   tabletLayout?: boolean;
+  initialCreateDeckId?: string;
+  openCreateCardOnMount?: boolean;
+  createCardRequestKey?: string;
+  onBrowseDeck?: (deckId: string) => void;
 };
 
 type CreateOption = 'card' | 'new' | 'import' | 'pick';
@@ -72,6 +76,10 @@ export function HomeCreateSection({
   onImportCards,
   onImportBackup,
   tabletLayout = false,
+  initialCreateDeckId,
+  openCreateCardOnMount = false,
+  createCardRequestKey,
+  onBrowseDeck,
 }: HomeCreateSectionProps) {
   const [showCreateDetails, setShowCreateDetails] = useState(false);
   const [selectedOption, setSelectedOption] = useState<CreateOption>('card');
@@ -83,10 +91,26 @@ export function HomeCreateSection({
   const [importText, setImportText] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handledCreateRequestRef = useRef('');
 
   const selectedPickDeckId = localSelectedDeckId || selectedDeck?.id || decks[0]?.id || '';
   const selectedCreateCardDeckId = createCardDeckId || selectedPickDeckId;
   const selectedCreateCardDeck = decks.find((deck) => deck.id === selectedCreateCardDeckId);
+
+  useEffect(() => {
+    if (!openCreateCardOnMount || !initialCreateDeckId) return;
+    if (!decks.some((deck) => deck.id === initialCreateDeckId)) return;
+
+    const requestKey = `${initialCreateDeckId}:${createCardRequestKey ?? 'default'}`;
+    if (handledCreateRequestRef.current === requestKey) return;
+
+    handledCreateRequestRef.current = requestKey;
+    setShowCreateDetails(true);
+    setSelectedOption('card');
+    setLocalSelectedDeckId(initialCreateDeckId);
+    setCreateCardDeckId(initialCreateDeckId);
+    onSelectDeckId(initialCreateDeckId);
+  }, [createCardRequestKey, decks, initialCreateDeckId, onSelectDeckId, openCreateCardOnMount]);
 
   function showStatus(message: string) {
     setStatusMessage(message);
@@ -284,6 +308,23 @@ export function HomeCreateSection({
     setCreateCardDeckId(deck.id);
     setSelectedOption('card');
     showStatus(`Selected deck: ${deck.name} ✓`);
+  }
+
+  function browseSelectedDeck() {
+    if (!selectedPickDeckId || !onBrowseDeck) {
+      showStatus('Choose a deck first');
+      return;
+    }
+
+    const deck = decks.find((candidate) => candidate.id === selectedPickDeckId);
+    if (!deck) {
+      showStatus('Choose a deck first');
+      return;
+    }
+
+    onSelectDeckId(deck.id);
+    setCreateCardDeckId(deck.id);
+    onBrowseDeck(deck.id);
   }
 
   const options: Array<{
@@ -520,7 +561,7 @@ export function HomeCreateSection({
 
         <View style={styles.importDropZone}>
           <Image source={importLargeFileBox} style={styles.importLargeIcon} resizeMode="contain" />
-          <Pressable
+       <Pressable
             accessibilityRole="button"
             onPress={chooseImportFile}
             style={({ pressed }) => [styles.importChooseFileButton, pressed && styles.pressed]}>
@@ -585,10 +626,10 @@ export function HomeCreateSection({
           >
             {decks.map((deck) => {
               const deckCards = cards.filter((card) => card.deckId === deck.id);
-              const active = deck.id === selectedPickDeckId;
+              const active = deck.id ===selectedPickDeckId;
 
               return (
-                <Pressable
+                 <Pressable
                   key={deck.id}
                   accessibilityRole="button"
                   accessibilityLabel={`Select ${deck.name}`}
@@ -629,13 +670,26 @@ export function HomeCreateSection({
           <View style={styles.pickDividerLineShort} />
         </View>
 
-        <Pressable
-          accessibilityRole="button"
-          onPress={useSelectedDeck}
-          style={({ pressed }) => [styles.pickUseButton, pressed && styles.pressed]}>
-          <Text style={styles.pickUseButtonText}>Use selected deck</Text>
-          <Image source={pickMagicWand} style={styles.pickUseButtonIcon} resizeMode="contain" />
-        </Pressable>
+        <View style={styles.pickActionRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Use selected deck"
+            onPress={useSelectedDeck}
+            style={({ pressed }) => [styles.pickUseButton, pressed && styles.pressed]}>
+            <Text adjustsFontSizeToFit minimumFontScale={0.72} numberOfLines={1} style={styles.pickUseButtonText}>
+              Use selected deck
+            </Text>
+            <Image source={pickMagicWand} style={styles.pickUseButtonIcon} resizeMode="contain" />
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Browse selected deck"
+            onPress={browseSelectedDeck}
+            style={({ pressed }) => [styles.pickBrowseButton, pressed && styles.pressed]}>
+            <Text style={styles.pickBrowseButtonText}>Browse</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }

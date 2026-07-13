@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CrayonFill } from '@/components/ui/crayon-fill';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/design';
 import { getCardState } from '@/lib/review-scheduling';
-import { getReviewQueue, isCardDue } from '@/lib/review-queue';
+import { getReviewQueue } from '@/lib/review-queue';
 import { getDecks, getFlashcards, getReviewLogs } from '@/storage/flashcards';
 import type { Deck, Flashcard, ReviewLog } from '@/types/flashcard';
 
@@ -24,9 +24,8 @@ type StatCard = {
   helper: string;
 };
 
-function isToday(value: string) {
+function isToday(value: string, now: Date) {
   const date = new Date(value);
-  const now = new Date();
 
   return (
     date.getFullYear() === now.getFullYear() &&
@@ -39,8 +38,11 @@ function getDeckName(deckId: string, decks: Deck[]) {
   return decks.find((deck) => deck.id === deckId)?.name ?? 'Recovered Deck';
 }
 
-function getDeckDueCount(deckId: string, cards: Flashcard[]) {
-  return cards.filter((card) => card.deckId === deckId && isCardDue(card)).length;
+function getDeckDueCount(deckId: string, cards: Flashcard[], reviewLogs: ReviewLog[], now: Date) {
+  return getReviewQueue(
+    cards.filter((card) => card.deckId === deckId),
+    { reviewLogs, now },
+  ).length;
 }
 
 export default function ReviewStatsScreen() {
@@ -59,13 +61,14 @@ export default function ReviewStatsScreen() {
   );
 
   const stats = useMemo(() => {
+    const now = new Date();
     const newCards = cards.filter((card) => getCardState(card) === 'new');
     const learningCards = cards.filter((card) => getCardState(card) === 'learning');
     const reviewCards = cards.filter((card) => getCardState(card) === 'review');
     const relearningCards = cards.filter((card) => getCardState(card) === 'relearning');
     const suspendedCards = cards.filter((card) => getCardState(card) === 'suspended');
-    const dueCards = getReviewQueue(cards);
-    const todayLogs = reviewLogs.filter((log) => isToday(log.reviewedAt));
+    const dueCards = getReviewQueue(cards, { reviewLogs, now });
+    const todayLogs = reviewLogs.filter((log) => isToday(log.reviewedAt, now));
     const passedToday = todayLogs.filter((log) => log.grade === 'good' || log.grade === 'easy').length;
     const accuracy = todayLogs.length > 0 ? Math.round((passedToday / todayLogs.length) * 100) : 0;
 
@@ -83,9 +86,13 @@ export default function ReviewStatsScreen() {
     return { statCards, todayLogs };
   }, [cards, reviewLogs]);
 
-  const decksWithDueCounts = decks
-    .map((deck) => ({ deck, dueCount: getDeckDueCount(deck.id, cards) }))
-    .sort((a, b) => b.dueCount - a.dueCount);
+  const decksWithDueCounts = useMemo(() => {
+    const now = new Date();
+
+    return decks
+      .map((deck) => ({ deck, dueCount: getDeckDueCount(deck.id, cards, reviewLogs, now) }))
+      .sort((a, b) => b.dueCount - a.dueCount);
+  }, [cards, decks, reviewLogs]);
 
   return (
     <ScrollView

@@ -49,3 +49,5 @@ CLAUDE.md
 maestro-debug-output/
 .maestro/output/
 .maestro/reports/
+
+/Flashcard-app-export-*.zip

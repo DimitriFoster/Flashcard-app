@@ -64,14 +64,14 @@ export const styles = StyleSheet.create({
   },
   topIconWrap: {
     width: 60,
-    height: 60,
+   height: 60,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
   topIcon: {
     width: 56,
-    height: 56,
+   height: 56,
   },
   topTextWrap: {
     flex: 1,
@@ -115,7 +115,7 @@ export const styles = StyleSheet.create({
   },
   caretIcon: {
     width: 26,
-    height: 14,
+   height: 14,
   },
   body: {
     paddingHorizontal: 16,
@@ -288,7 +288,7 @@ export const styles = StyleSheet.create({
   },
   importLargeIcon: {
     width: 132,
-    height: 94,
+   height: 94,
     marginBottom: 8,
   },
 
@@ -301,7 +301,7 @@ export const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.42)',
     paddingHorizontal: 16,
     alignItems: 'center',
-    justifyContent: 'center',
+   justifyContent: 'center',
     marginBottom: 8,
   },
   importChooseFileText: {
@@ -407,7 +407,7 @@ export const styles = StyleSheet.create({
 
   topArrowUp: {
     width: 26,
-    height: 26,
+   height: 26,
     flexShrink: 0,
     transform: [{ rotate: '180deg' }],
   },
@@ -423,7 +423,7 @@ export const styles = StyleSheet.create({
   },
   pickCaretDown: {
     width: 28,
-    height: 16,
+   height: 16,
   },
   pickHeading: {
     color: '#0E6F20',
@@ -467,7 +467,7 @@ export const styles = StyleSheet.create({
   },
   pickTopicIcon: {
     width: 50,
-    height: 50,
+   height: 50,
   },
   pickDeckTextWrap: {
     flex: 1,
@@ -492,7 +492,7 @@ export const styles = StyleSheet.create({
   },
   pickUnselectedIcon: {
     width: 32,
-    height: 32,
+   height: 32,
     flexShrink: 0,
   },
   pickEmptyState: {
@@ -524,28 +524,55 @@ export const styles = StyleSheet.create({
     lineHeight: 28,
     fontWeight: '900',
   },
-  pickUseButton: {
+  pickActionRow: {
+    flexDirection: 'row',
+    gap: 8,
     marginTop: 12,
+  },
+  pickUseButton: {
+    flex: 1.6,
+    minWidth: 0,
     minHeight: 52,
     borderRadius: 18,
     borderWidth: 2,
     borderColor: 'rgba(38, 122, 48, 0.82)',
     backgroundColor: 'rgba(255,255,255,0.24)',
-    paddingHorizontal: 22,
+    paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
+    gap: 6,
   },
   pickUseButtonText: {
     color: '#0E6F20',
-    fontSize: 18,
-    lineHeight: 23,
+    flexShrink: 1,
+    fontSize: 16,
+    lineHeight: 20,
     fontWeight: '900',
+    textAlign: 'center',
   },
   pickUseButtonIcon: {
-    width: 32,
-    height: 32,
+    width: 26,
+    height: 26,
+    flexShrink: 0,
+  },
+  pickBrowseButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.24)',
+    borderColor: 'rgba(38, 122, 48, 0.82)',
+    borderRadius: 18,
+    borderWidth: 2,
+    flex: 0.75,
+    justifyContent: 'center',
+    minHeight: 52,
+    minWidth: 0,
+    paddingHorizontal: 8,
+  },
+  pickBrowseButtonText: {
+    color: '#0E6F20',
+    fontSize: 16,
+    fontWeight: '900',
+    lineHeight: 20,
   },
 
 
@@ -630,7 +657,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 18,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+   justifyContent: 'center',
     gap: 10,
   },
   createCardButtonText: {

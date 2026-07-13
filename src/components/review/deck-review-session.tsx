@@ -34,7 +34,7 @@ import { FOLIO_HAND_FONT } from '@/folio-review/folioFonts';
 import type { SessionTokenStatus } from '@/folio-review/types';
 import type { Flashcard, ReviewGrade } from '@/types/flashcard';
 
-const TRY_AT_HOME_BOX_IMAGE = require('../../../assets/folio-ui/home-page/open-import/import_large_file_box.png');
+const TRY_AT_HOME_BOX_IMAGE = require('../../../assets/tutorial/leitner_box_transparent.png');
 
 const DEFAULT_SESSION_TOKENS: SessionTokenStatus[] = [
   'empty',

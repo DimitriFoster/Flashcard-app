@@ -17,12 +17,35 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, PanResponder } from 'react-native';
 
 import { DeckReviewSession } from '@/components/review/deck-review-session';
-import { getDecks, getFlashcardsByDeck, reviewFlashcard, undoLastReview, updateFlashcard } from '@/storage/flashcards';
+import { SessionRecap } from '@/components/review/session-recap';
+import {
+  getDecks,
+  getFlashcardsByDeck,
+  getReviewLogs,
+  reviewFlashcard,
+  undoLastReview,
+  updateFlashcard,
+} from '@/storage/flashcards';
 import type { Deck, Flashcard, ReviewGrade } from '@/types/flashcard';
 import { getReviewQueue } from '../../lib/review-queue';
+import { shouldShowSessionRecap, type ReviewGradeCounts } from '../../lib/session-recap';
 
 function findDeck(deckId: string, decks: Deck[]) {
   return decks.find((deck) => deck.id === deckId);
+}
+
+type SessionReviewAction = {
+  cardId: string;
+  grade: ReviewGrade;
+};
+
+function createEmptyGradeCounts(): ReviewGradeCounts {
+  return {
+    again: 0,
+    hard: 0,
+    good: 0,
+    easy: 0,
+  };
 }
 
 export default function DeckReviewScreen() {
@@ -60,6 +83,11 @@ export default function DeckReviewScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [editFront, setEditFront] = useState('');
   const [editBack, setEditBack] = useState('');
+  const [sessionStartedWithCards, setSessionStartedWithCards] = useState(false);
+  const [sessionReviewedCount, setSessionReviewedCount] = useState(0);
+  const [sessionGradeCounts, setSessionGradeCounts] = useState<ReviewGradeCounts>(createEmptyGradeCounts);
+  const [sessionReviewHistory, setSessionReviewHistory] = useState<SessionReviewAction[]>([]);
+  const [sessionCompleted, setSessionCompleted] = useState(false);
 
   /**
    * Animated.Value stores the horizontal card position during swipe gestures.
@@ -72,6 +100,18 @@ export default function DeckReviewScreen() {
    * values. This ref keeps the latest card count available inside gesture logic.
    */
   const cardsLengthRef = useRef(0);
+  const sessionCompletedRef = useRef(false);
+  const sessionStartedAtRef = useRef<string | undefined>(undefined);
+
+  const resetSessionTracking = useCallback((startedWithCards: boolean) => {
+    sessionCompletedRef.current = false;
+    sessionStartedAtRef.current = startedWithCards ? new Date().toISOString() : undefined;
+    setSessionStartedWithCards(startedWithCards);
+    setSessionReviewedCount(0);
+    setSessionGradeCounts(createEmptyGradeCounts());
+    setSessionReviewHistory([]);
+    setSessionCompleted(false);
+  }, []);
 
   const deckName = useMemo(
     () => (deckId ? findDeck(deckId, decks)?.name : undefined),
@@ -104,7 +144,7 @@ export default function DeckReviewScreen() {
     const deckCards = getFlashcardsByDeck(deckId);
 
     if (isDueMode) {
-      return getReviewQueue(deckCards);
+      return getReviewQueue(deckCards, { reviewLogs: getReviewLogs() });
     }
 
     if (normalizedCardSearch) {
@@ -141,10 +181,14 @@ export default function DeckReviewScreen() {
       setTotalDeckCards(totalCardsInDeck);
       setCurrentIndex(nextInitialIndex);
       setFlipped(false);
-      setCanUndoReview(false);
-      setIsEditing(false);
-      translateX.setValue(0);
-    }, [initialCardId, loadCardsForCurrentMode, requestedInitialCardIndex, translateX])
+       setCanUndoReview(false);
+       setIsEditing(false);
+       translateX.setValue(0);
+
+      if (!isDueMode || !sessionCompletedRef.current) {
+        resetSessionTracking(isDueMode && nextCards.length > 0);
+      }
+      }, [deckId, initialCardId, isDueMode, loadCardsForCurrentMode, requestedInitialCardIndex, resetSessionTracking, translateX])
   );
 
   /**
@@ -279,6 +323,10 @@ export default function DeckReviewScreen() {
 
     reviewFlashcard(currentCard.id, grade);
     setCanUndoReview(true);
+    const nextReviewedCount = sessionReviewedCount + 1;
+    setSessionReviewedCount(nextReviewedCount);
+    setSessionGradeCounts((counts) => ({ ...counts, [grade]: counts[grade] + 1 }));
+    setSessionReviewHistory((history) => [...history, { cardId: currentCard.id, grade }]);
 
     /**
      * Reload from storage so the UI reflects the updated review state.
@@ -303,6 +351,18 @@ export default function DeckReviewScreen() {
        */
       return Math.min(index, nextCards.length - 1);
     });
+
+    if (
+      shouldShowSessionRecap({
+        isDueMode,
+        sessionStartedWithCards,
+        sessionReviewedCount: nextReviewedCount,
+        currentQueueLength: nextCards.length,
+      })
+    ) {
+      sessionCompletedRef.current = true;
+      setSessionCompleted(true);
+    }
   }
 
   function handleUndoReview() {
@@ -324,6 +384,41 @@ export default function DeckReviewScreen() {
     setCurrentIndex(restoredIndex >= 0 ? restoredIndex : 0);
     setFlipped(false);
     setCanUndoReview(false);
+    sessionCompletedRef.current = false;
+    setSessionCompleted(false);
+    setSessionStartedWithCards(true);
+    setSessionReviewHistory((history) => history.slice(0, -1));
+    setSessionReviewedCount((count) => Math.max(0, count - 1));
+    if (sessionReviewHistory.length > 0) {
+      const undoneAction = sessionReviewHistory[sessionReviewHistory.length - 1];
+      setSessionGradeCounts((counts) => ({
+        ...counts,
+        [undoneAction.grade]: Math.max(0, counts[undoneAction.grade] - 1),
+      }));
+    }
+    translateX.setValue(0);
+  }
+
+  function restartSession() {
+    if (!deckId || !isDueMode) {
+      return;
+    }
+
+    const nextCards = loadCardsForCurrentMode();
+
+    if (nextCards.length === 0) {
+      return;
+    }
+
+    resetSessionTracking(true);
+    setCards(nextCards);
+    setTotalDeckCards(getFlashcardsByDeck(deckId).length);
+    setCurrentIndex(0);
+    setFlipped(false);
+    setCanUndoReview(false);
+    setIsEditing(false);
+    setEditFront(nextCards[0]?.front ?? '');
+    setEditBack(nextCards[0]?.back ?? '');
     translateX.setValue(0);
   }
 
@@ -382,6 +477,22 @@ export default function DeckReviewScreen() {
       },
     })
   ).current;
+
+  if (isDueMode && sessionCompleted && deckId) {
+    return (
+      <SessionRecap
+        deckId={deckId}
+        deckName={deckName}
+        reviewedCount={sessionReviewedCount}
+        uniqueReviewedCount={new Set(sessionReviewHistory.map((action) => action.cardId)).size}
+        gradeCounts={sessionGradeCounts}
+        canUndo={canUndoReview}
+        onUndo={handleUndoReview}
+        onRestart={restartSession}
+        onBackToReview={() => router.push('/review')}
+      />
+    );
+  }
 
   return (
     <DeckReviewSession
