@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HomeCreateSection } from '@/components/home/create-section';
@@ -27,9 +27,13 @@ const heroCardsImage = require('../../assets/folio-ui/home-page/home_hero_cards.
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const [decks, setDecks] = useState<Deck[]>([]);
   const [cards, setCards] = useState<Flashcard[]>([]);
   const [selectedDeckId, setSelectedDeckId] = useState('');
+
+  const isTabletLayout = width >= 600;
+  const tabletPageWidth = Math.min(width - 96, 560);
 
   const selectedDeck = useMemo(
     () => decks.find((deck) => deck.id === selectedDeckId),
@@ -111,38 +115,41 @@ export default function HomeScreen() {
           paddingBottom: insets.bottom + 42,
         },
       ]}>
-      <Text style={styles.topLabel}>FLASHCARD WORKSPACE</Text>
+      <View style={[styles.pageContent, isTabletLayout ? { width: tabletPageWidth } : null]}>
+        <Text style={[styles.topLabel, isTabletLayout && styles.topLabelTablet]}>FLASHCARD WORKSPACE</Text>
 
-      <View style={styles.heroRow}>
-        <View style={styles.heroTextBlock}>
-          <Text style={styles.title}>Create decks fast,{"\n"}then review with{"\n"}intent.</Text>
-          <Text style={styles.subtitle}>
-            Capture cards into{"\n"}focused decks, then jump{"\n"}to Review when ready.
-          </Text>
+        <View style={[styles.heroRow, isTabletLayout && styles.heroRowTablet]}>
+          <View style={[styles.heroTextBlock, isTabletLayout && styles.heroTextBlockTablet]}>
+            <Text style={[styles.title, isTabletLayout && styles.titleTablet]}>Create decks fast,{"\n"}then review with{"\n"}intent.</Text>
+            <Text style={[styles.subtitle, isTabletLayout && styles.subtitleTablet]}>
+              Capture cards into{"\n"}focused decks, then jump{"\n"}to Review when ready.
+            </Text>
+          </View>
+
+          <View style={[styles.heroArtFrame, isTabletLayout && styles.heroArtFrameTablet]}>
+            <Image source={heroCardsImage} style={[styles.heroArt, isTabletLayout && styles.heroArtTablet]} resizeMode="contain" />
+          </View>
         </View>
 
-        <View style={styles.heroArtFrame}>
-          <Image source={heroCardsImage} style={styles.heroArt} resizeMode="contain" />
-        </View>
+        <HomeCreateSection
+          decks={decks}
+          cards={cards}
+          selectedDeck={selectedDeck}
+          tabletLayout={isTabletLayout}
+          onSelectDeckId={setSelectedDeckId}
+          onCreateDeck={createDeck}
+          onCreateCard={createCard}
+          onDeleteDeck={removeDeck}
+          onDeleteCard={removeCard}
+          onImportCards={importCards}
+          onExportBackup={exportAppBackupText}
+          onImportBackup={importBackup}
+        />
+
+        <HomeReviewSection onPressReview={() => router.push('/review')} tabletLayout={isTabletLayout} />
+
+        <HomeNotesSection onPressNotes={() => router.push('/notes')} tabletLayout={isTabletLayout} />
       </View>
-
-      <HomeCreateSection
-        decks={decks}
-        cards={cards}
-        selectedDeck={selectedDeck}
-        onSelectDeckId={setSelectedDeckId}
-        onCreateDeck={createDeck}
-        onCreateCard={createCard}
-        onDeleteDeck={removeDeck}
-        onDeleteCard={removeCard}
-        onImportCards={importCards}
-        onExportBackup={exportAppBackupText}
-        onImportBackup={importBackup}
-      />
-
-      <HomeReviewSection onPressReview={() => router.push('/review')} />
-
-      <HomeNotesSection onPressNotes={() => router.push('/notes')} />
     </ScrollView>
   );
 }
@@ -154,7 +161,11 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 18,
+  },
+  pageContent: {
     gap: 12,
+    width: '100%',
+    alignSelf: 'center',
   },
   topLabel: {
     color: COLORS.reviewDeep,
@@ -163,15 +174,26 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     textTransform: 'uppercase',
   },
+  topLabelTablet: {
+    textAlign: 'center',
+  },
   heroRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
   },
+  heroRowTablet: {
+    justifyContent: 'center',
+    gap: 22,
+  },
   heroTextBlock: {
     flex: 1,
     paddingTop: 0,
+  },
+  heroTextBlockTablet: {
+    flex: 0,
+    alignItems: 'center',
   },
   title: {
     color: COLORS.ink,
@@ -180,12 +202,18 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: -0.4,
   },
+  titleTablet: {
+    textAlign: 'center',
+  },
   subtitle: {
     marginTop: 10,
     color: '#4F4740',
     fontSize: 14,
     lineHeight: 19,
     fontWeight: '500',
+  },
+  subtitleTablet: {
+    textAlign: 'center',
   },
   heroArtFrame: {
     width: 142,
@@ -194,9 +222,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'center',
   },
+  heroArtFrameTablet: {
+    width: 156,
+    height: 156,
+  },
   heroArt: {
     width: 136,
     height: 136,
     ...SHADOWS.soft,
+  },
+  heroArtTablet: {
+    width: 150,
+    height: 150,
   },
 });

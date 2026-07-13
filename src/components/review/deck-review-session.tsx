@@ -34,7 +34,7 @@ import { FOLIO_HAND_FONT } from '@/folio-review/folioFonts';
 import type { SessionTokenStatus } from '@/folio-review/types';
 import type { Flashcard, ReviewGrade } from '@/types/flashcard';
 
-const TUTORIAL_IMAGE = require('../../../assets/tutorial/session-flow-tutorial.png');
+const TRY_AT_HOME_BOX_IMAGE = require('../../../assets/folio-ui/home-page/open-import/import_large_file_box.png');
 
 const DEFAULT_SESSION_TOKENS: SessionTokenStatus[] = [
   'empty',
@@ -109,6 +109,73 @@ function getCardHint(flipped: boolean) {
   return flipped ? 'Tap to return to prompt' : 'Tap to reveal answer';
 }
 
+
+function GuideBullet({ color, children }: { color: string; children?: React.ReactNode }) {
+  return (
+    <View style={styles.guideBulletRow}>
+      <View style={[styles.guideBulletDot, { backgroundColor: color }]} />
+      <Text style={styles.guideBody}>{children}</Text>
+    </View>
+  );
+}
+
+function GuideStep({ number, children }: { number: string; children?: React.ReactNode }) {
+  return (
+    <View style={styles.guideStepRow}>
+      <View style={styles.guideStepNumber}>
+        <Text style={styles.guideStepNumberText}>{number}</Text>
+      </View>
+      <Text style={styles.guideBody}>{children}</Text>
+    </View>
+  );
+}
+
+function SpacedRepetitionGuide() {
+  return (
+    <ScrollView
+      style={styles.tutorialGuideScroll}
+      contentContainerStyle={styles.tutorialGuideContent}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.guideSection}>
+        <Text style={styles.guideSectionTitle}>What is spaced repetition?</Text>
+        <Text style={styles.guideBody}>
+          Spaced repetition is a simple way to study a little today, then bring cards back later when your memory needs another nudge.
+        </Text>
+        <Text style={styles.guideBody}>
+          Hard cards come back sooner. Easy cards wait longer. The goal is steady recall, not perfect first tries.
+        </Text>
+      </View>
+
+      <View style={styles.guideSection}>
+        <Text style={styles.guideSectionTitle}>How to use Folio</Text>
+        <GuideBullet color="#1976D2">Try to answer before you flip the card.</GuideBullet>
+        <GuideBullet color="#D1841F">Reveal the answer and compare honestly.</GuideBullet>
+        <GuideBullet color="#C75D57">Pick Again, Hard, Good, or Easy.</GuideBullet>
+        <GuideBullet color="#5F8E4E">Folio decides when the card returns.</GuideBullet>
+        <View style={styles.guideCallout}>
+          <Text style={styles.guideCalloutText}>Small, honest reviews beat one giant cram session.</Text>
+        </View>
+      </View>
+
+      <View style={styles.guideSection}>
+        <Text style={styles.guideSectionTitle}>Try at Home!</Text>
+        <Text style={styles.guideBody}>
+          You can practice the same system with traditional paper flashcards:
+        </Text>
+        <GuideStep number="1">Make a small stack of about 10 cards.</GuideStep>
+        <GuideStep number="2">Answer out loud before you flip each card.</GuideStep>
+        <GuideStep number="3">Sort cards into piles: Again, Hard, Good, and Easy.</GuideStep>
+        <Image source={TRY_AT_HOME_BOX_IMAGE} resizeMode="contain" style={styles.guideBoxIcon} />
+        <GuideStep number="4">Review Again now. Hard later. Good tomorrow. Easy in a few days.</GuideStep>
+        <GuideStep number="5">Keep missed cards near the front of your next practice stack.</GuideStep>
+      </View>
+
+      <Text style={styles.guideFooter}>You are training your memory in small passes.</Text>
+    </ScrollView>
+  );
+}
+
 function NavigateButton({ label, accessibilityLabel, testID, onPress }: { label: string; accessibilityLabel: string; testID: string; onPress?: () => void }) {
   return (
     <Pressable
@@ -163,7 +230,7 @@ export function DeckReviewSession({
   const pageWidth = Math.min(width - 18, 434);
   const safeHeight = height - insets.top - insets.bottom;
   const isCompactHeight = height < 820;
-  const useCompactGuideClose = width < 370 || height < 720;
+  const useCompactGuideClose = width < 460 || height < 760;
   const isLandscape = width > height;
   const isBrowseMode = !showGradeButtons;
   const isReviewTiny = showGradeButtons && (width < 360 || safeHeight < 640);
@@ -496,9 +563,9 @@ export function DeckReviewSession({
           <View style={styles.tutorialOverlay}>
             <View style={styles.tutorialCard}>
               <View style={styles.tutorialHeader}>
-                <View>
+                <View style={styles.tutorialTitleBlock}>
                   <Text style={styles.tutorialEyebrow}>Beginner guide</Text>
-                  <Text style={styles.tutorialTitle}>Spaced repetition basics</Text>
+                  <Text adjustsFontSizeToFit allowFontScaling={false} minimumFontScale={0.82} numberOfLines={1} style={styles.tutorialTitle}>Spaced repetition basics</Text>
                 </View>
                 <Pressable
                   accessibilityRole="button"
@@ -516,7 +583,7 @@ export function DeckReviewSession({
                   </Text>
                 </Pressable>
               </View>
-              <Image source={TUTORIAL_IMAGE} resizeMode="contain" style={styles.tutorialImage} />
+              <SpacedRepetitionGuide />
             </View>
           </View>
         </Modal>
@@ -857,9 +924,9 @@ export function DeckReviewSession({
         <View style={styles.tutorialOverlay}>
           <View style={styles.tutorialCard}>
             <View style={styles.tutorialHeader}>
-              <View>
+              <View style={styles.tutorialTitleBlock}>
                 <Text style={styles.tutorialEyebrow}>Beginner guide</Text>
-                <Text style={styles.tutorialTitle}>Spaced repetition basics</Text>
+                <Text adjustsFontSizeToFit allowFontScaling={false} minimumFontScale={0.82} numberOfLines={1} style={styles.tutorialTitle}>Spaced repetition basics</Text>
               </View>
               <Pressable
                 accessibilityRole="button"
@@ -877,7 +944,7 @@ export function DeckReviewSession({
                 </Text>
               </Pressable>
             </View>
-            <Image source={TUTORIAL_IMAGE} resizeMode="contain" style={styles.tutorialImage} />
+            <SpacedRepetitionGuide />
           </View>
         </View>
       </Modal>
@@ -1329,8 +1396,13 @@ const styles = StyleSheet.create({
   tutorialHeader: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
     justifyContent: 'space-between',
+  },
+  tutorialTitleBlock: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 2,
   },
   tutorialEyebrow: {
     color: '#7A6D5E',
@@ -1352,6 +1424,7 @@ const styles = StyleSheet.create({
     borderColor: '#E7A93B',
     borderRadius: 14,
     borderWidth: 1,
+    flexShrink: 0,
     justifyContent: 'center',
     minHeight: 36,
     paddingHorizontal: 14,
@@ -1372,10 +1445,102 @@ const styles = StyleSheet.create({
     lineHeight: 27,
     textAlign: 'center',
   },
-  tutorialImage: {
-    height: 520,
-    maxHeight: '82%',
+  tutorialGuideScroll: {
     width: '100%',
+  },
+  tutorialGuideContent: {
+    gap: 12,
+    paddingBottom: 4,
+  },
+  guideSection: {
+    backgroundColor: 'rgba(255, 252, 245, 0.82)',
+    borderColor: '#D8C8A9',
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 8,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+  },
+  guideSectionTitle: {
+    color: '#332A24',
+    fontFamily: FOLIO_HAND_FONT,
+    fontSize: 22,
+    fontWeight: '400',
+    lineHeight: 27,
+  },
+  guideBody: {
+    color: '#3D342E',
+    flexShrink: 1,
+    fontSize: 15.5,
+    fontWeight: '700',
+    lineHeight: 21,
+  },
+  guideBulletRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 9,
+  },
+  guideBulletDot: {
+    borderRadius: 999,
+    height: 10,
+    marginTop: 6,
+    width: 10,
+  },
+  guideCallout: {
+    backgroundColor: '#FFF4D8',
+    borderColor: '#D8C8A9',
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  guideCalloutText: {
+    color: '#6F6255',
+    fontFamily: FOLIO_HAND_FONT,
+    fontSize: 15,
+    fontWeight: '400',
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  guideStepRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  guideStepNumber: {
+    alignItems: 'center',
+    backgroundColor: '#FFF4D8',
+    borderColor: '#E7C16E',
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: 'center',
+    marginTop: -1,
+    width: 28,
+  },
+  guideStepNumberText: {
+    color: '#6B5837',
+    fontFamily: FOLIO_HAND_FONT,
+    fontSize: 16,
+    fontWeight: '400',
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  guideBoxIcon: {
+    alignSelf: 'center',
+    height: 76,
+    marginVertical: -1,
+    width: 112,
+  },
+  guideFooter: {
+    color: '#7A6D5E',
+    fontFamily: FOLIO_HAND_FONT,
+    fontSize: 15,
+    fontWeight: '400',
+    lineHeight: 20,
+    paddingHorizontal: 6,
+    textAlign: 'center',
   },
   pressed: {
     opacity: 0.88,

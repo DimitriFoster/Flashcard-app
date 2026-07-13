@@ -339,7 +339,7 @@ export function FolioBrowseControls({ onPrevious, onFlip, onNext }: { onPrevious
 
 export function FolioTutorialModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { width, height } = useWindowDimensions();
-  const useCompactGuideClose = width < 370 || height < 720;
+  const useCompactGuideClose = width < 460 || height < 760;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -347,9 +347,9 @@ export function FolioTutorialModal({ visible, onClose }: { visible: boolean; onC
         <View style={styles.tutorialCard}>
           <CrayonFill tone="review" variant="loose" opacity={0.2} />
           <View style={styles.tutorialHeader}>
-            <View>
+            <View style={styles.tutorialTitleBlock}>
               <Text style={styles.tutorialEyebrow}>Beginner guide</Text>
-              <Text style={styles.tutorialTitle}>Spaced repetition basics</Text>
+              <Text adjustsFontSizeToFit allowFontScaling={false} minimumFontScale={0.82} numberOfLines={1} style={styles.tutorialTitle}>Spaced repetition basics</Text>
             </View>
             {useCompactGuideClose ? (
               <Pressable
@@ -496,11 +496,12 @@ const styles = StyleSheet.create({
   browseFlipButton: { flex: 1.35, minHeight: 64, borderRadius: FOLIO.radius.lg, borderWidth: 2 },
   tutorialOverlay: { flex: 1, backgroundColor: 'rgba(42,36,31,0.42)', padding: FOLIO.spacing.lg, justifyContent: 'center' },
   tutorialCard: { position: 'relative', overflow: 'hidden', borderRadius: FOLIO.radius.xl, backgroundColor: FOLIO.colors.card, borderColor: '#D8C8A9', borderWidth: 1, padding: FOLIO.spacing.md, gap: FOLIO.spacing.md, ...FOLIO.shadows.card },
-  tutorialHeader: { position: 'relative', zIndex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: FOLIO.spacing.md },
+  tutorialHeader: { position: 'relative', zIndex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: FOLIO.spacing.sm },
+  tutorialTitleBlock: { flex: 1, minWidth: 0, paddingRight: 2 },
   tutorialEyebrow: { color: '#7A6D5E', fontSize: 13, lineHeight: 17, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase' },
   tutorialTitle: { color: FOLIO.colors.ink, fontFamily: FOLIO_HAND_FONT, fontSize: 25, lineHeight: 31, fontWeight: '400' },
   tutorialImage: { position: 'relative', zIndex: 1, width: '100%', minHeight: 420, maxHeight: 620, borderRadius: FOLIO.radius.lg },
-  tutorialCloseCircle: { alignItems: 'center', backgroundColor: FOLIO.colors.orangeSoft, borderColor: FOLIO.colors.orange, borderRadius: FOLIO.radius.pill, borderWidth: 2, height: 36, justifyContent: 'center', width: 36 },
+  tutorialCloseCircle: { alignItems: 'center', backgroundColor: FOLIO.colors.orangeSoft, borderColor: FOLIO.colors.orange, borderRadius: FOLIO.radius.pill, borderWidth: 2, flexShrink: 0, height: 36, justifyContent: 'center', width: 36 },
   tutorialCloseCircleText: { color: FOLIO.colors.orange, fontSize: 24, fontWeight: '900', lineHeight: 27, textAlign: 'center' },
   deckIconShell: { alignItems: 'center', justifyContent: 'center', backgroundColor: FOLIO.colors.card, borderColor: FOLIO.colors.blueCrayon, borderWidth: 1 },
 });

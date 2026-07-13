@@ -27,6 +27,11 @@ export const styles = StyleSheet.create({
     backgroundColor: COLORS.createPaper,
     ...SHADOWS.card,
   },
+  collapsedSectionTablet: {
+    alignItems: 'center',
+    minHeight: 108,
+    paddingHorizontal: 24,
+  },
   headerPressable: {
     paddingHorizontal: 16,
     paddingTop: 10,
@@ -36,6 +41,26 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  topRowTablet: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  tabletTitleLine: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  tabletInlineIcon: {
+    width: 42,
+    height: 42,
+  },
+  tabletInlineActionIcon: {
+    width: 24,
+    height: 24,
+    flexShrink: 0,
   },
   topIconWrap: {
     width: 60,
@@ -58,11 +83,20 @@ export const styles = StyleSheet.create({
     lineHeight: 26,
     fontWeight: '900',
   },
+  topTitleTablet: {
+    fontSize: 24,
+    lineHeight: 28,
+    textAlign: 'center',
+  },
   topSubtitle: {
     color: COLORS.ink,
     fontSize: 15,
     lineHeight: 20,
     fontWeight: '600',
+  },
+  topSubtitleTablet: {
+    maxWidth: 340,
+    textAlign: 'center',
   },
   topArrow: {
     width: 26,

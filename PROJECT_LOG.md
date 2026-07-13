@@ -169,3 +169,8 @@
 - Round 87: restyled the spaced repetition help guide to match Folio's softer paper UI, removed the strong blue panel outlines, increased guide text sizing, and set the "Spaced repetition basics" modal title in the same Folio hand-drawn header font.
 
 - Round 88: simplified the spaced repetition help guide by removing the diagram-style visuals, keeping the warm Folio paper styling, adding a short beginner explanation, and adding a Try at Home section for practicing with traditional paper flashcards.
+
+- Round 89: added a tablet breakpoint for the Home screen at 600px and up. The Home content is centered in a capped-width column, and the Create / Review / Notes home buttons switch to centered tablet layouts with inline icon+title rows and centered subtitle text while preserving the existing phone layout.
+- Round 90: restored the create-panel tablet header action icons/carets so New deck, Import deck, and Pick deck keep their dropdown affordance while the tablet title/icon layout stays centered.
+
+- Round 91: rebuilt the help guide content as a native scrollable Folio panel to avoid medium-phone clipping, made the close control compact on more phone sizes, kept the “Small, honest reviews” callout inside its section, and placed the cardboard box icon between steps 3 and 4 of the Try at Home section. Also refreshed the fallback tutorial PNG with the same simplified no-diagram guide.

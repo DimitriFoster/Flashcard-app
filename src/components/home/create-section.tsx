@@ -57,6 +57,7 @@ type HomeCreateSectionProps = {
   onImportCards: (cards: ParsedImportCard[], options: ImportCardsOptions) => ImportCardsResult;
   onExportBackup: () => string;
   onImportBackup: (rawText: string) => ImportAppBackupResult | undefined;
+  tabletLayout?: boolean;
 };
 
 type CreateOption = 'card' | 'new' | 'import' | 'pick';
@@ -70,6 +71,7 @@ export function HomeCreateSection({
   onSelectDeckId,
   onImportCards,
   onImportBackup,
+  tabletLayout = false,
 }: HomeCreateSectionProps) {
   const [showCreateDetails, setShowCreateDetails] = useState(false);
   const [selectedOption, setSelectedOption] = useState<CreateOption>('card');
@@ -348,21 +350,31 @@ export function HomeCreateSection({
       <Pressable
         accessibilityRole="button"
         onPress={toggleCreateSection}
-        style={({ pressed }) => [styles.collapsedSection, pressed && styles.pressed]}>
+        style={({ pressed }) => [styles.collapsedSection, tabletLayout && styles.collapsedSectionTablet, pressed && styles.pressed]}>
         <HomePanelFill source={createPanelSwatch} opacity={1} />
 
-        <View style={styles.topRow}>
-          <View style={styles.topIconWrap}>
-            <Image source={createCirclePencil} style={styles.topIcon} resizeMode="contain" />
+        {tabletLayout ? (
+          <View style={styles.topRowTablet}>
+            <View style={styles.tabletTitleLine}>
+              <Image source={createCirclePencil} style={styles.tabletInlineIcon} resizeMode="contain" />
+              <Text style={[styles.topTitle, styles.topTitleTablet]}>create</Text>
+            </View>
+            <Text style={[styles.topSubtitle, styles.topSubtitleTablet]}>Choose a deck or start a new one.</Text>
           </View>
+        ) : (
+          <View style={styles.topRow}>
+            <View style={styles.topIconWrap}>
+              <Image source={createCirclePencil} style={styles.topIcon} resizeMode="contain" />
+            </View>
 
-          <View style={styles.topTextWrap}>
-            <Text style={styles.topTitle}>create</Text>
-            <Text style={styles.topSubtitle}>Choose a deck or start{`\n`}a new one.</Text>
+            <View style={styles.topTextWrap}>
+              <Text style={styles.topTitle}>create</Text>
+              <Text style={styles.topSubtitle}>Choose a deck or start{`\n`}a new one.</Text>
+            </View>
+
+            <Image source={createArrowRight} style={styles.topArrow} resizeMode="contain" />
           </View>
-
-          <Image source={createArrowRight} style={styles.topArrow} resizeMode="contain" />
-        </View>
+        )}
       </Pressable>
     );
   }
@@ -636,18 +648,29 @@ export function HomeCreateSection({
         accessibilityRole="button"
         onPress={handleHeaderPress}
         style={({ pressed }) => [styles.headerPressable, pressed && styles.pressed]}>
-        <View style={styles.topRow}>
-          <View style={styles.topIconWrap}>
-            <Image source={headerConfig.icon} style={styles.topIcon} resizeMode="contain" />
+        {tabletLayout ? (
+          <View style={styles.topRowTablet}>
+            <View style={styles.tabletTitleLine}>
+              <Image source={headerConfig.icon} style={styles.tabletInlineIcon} resizeMode="contain" />
+              <Text style={[styles.topTitle, styles.topTitleTablet]}>{headerConfig.title}</Text>
+              <Image source={headerConfig.actionIcon} style={[styles.tabletInlineActionIcon, headerConfig.arrowStyle]} resizeMode="contain" />
+            </View>
+            <Text style={[styles.topSubtitle, styles.topSubtitleTablet]}>{headerConfig.subtitle.replace(/\n/g, ' ')}</Text>
           </View>
+        ) : (
+          <View style={styles.topRow}>
+            <View style={styles.topIconWrap}>
+              <Image source={headerConfig.icon} style={styles.topIcon} resizeMode="contain" />
+            </View>
 
-          <View style={styles.topTextWrap}>
-            <Text style={styles.topTitle}>{headerConfig.title}</Text>
-            <Text style={styles.topSubtitle}>{headerConfig.subtitle}</Text>
+            <View style={styles.topTextWrap}>
+              <Text style={styles.topTitle}>{headerConfig.title}</Text>
+              <Text style={styles.topSubtitle}>{headerConfig.subtitle}</Text>
+            </View>
+
+            <Image source={headerConfig.actionIcon} style={headerConfig.arrowStyle} resizeMode="contain" />
           </View>
-
-          <Image source={headerConfig.actionIcon} style={headerConfig.arrowStyle} resizeMode="contain" />
-        </View>
+        )}
       </Pressable>
 
       <View style={styles.divider} />
