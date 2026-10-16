@@ -5,12 +5,13 @@ import {
   Image,
   ImageBackground,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HomePanelFill } from '@/components/home/home-panel-fill';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/design';
@@ -19,6 +20,8 @@ import { FOLIO_HAND_FONT } from '@/folio-review/folioFonts';
 import { folioReviewAssets } from '@/folio-review/folioReviewAssets';
 import {
   canRestartReviewSession,
+  getSessionRecapPageWidth,
+  getSessionRecapSafeAreaSpacing,
   summarizeSessionRecap,
   type ReviewGradeCounts,
   type SessionRecapSection,
@@ -89,6 +92,10 @@ export function SessionRecap({
   onRestart,
   onBackToReview,
 }: SessionRecapProps) {
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const pageWidth = getSessionRecapPageWidth(width);
+  const safeAreaSpacing = getSessionRecapSafeAreaSpacing(insets);
   const [summary, setSummary] = useState<SessionRecapSummary>(() => getInitialSummary(deckId));
 
   const refresh = useCallback(() => {
@@ -135,8 +142,8 @@ export function SessionRecap({
       resizeMode="cover"
       style={styles.screen}
     >
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.frame}>
+      <View style={[styles.safeArea, { paddingTop: safeAreaSpacing.paddingTop }]}>
+        <View style={[styles.frame, { width: pageWidth }]}>
           <View style={styles.header}>
             <FolioAssetButton
               source={folioReviewAssets.header.back}
@@ -158,8 +165,9 @@ export function SessionRecap({
 
           <ScrollView
             accessibilityLabel="Completed session recap"
-            contentContainerStyle={styles.content}
+            contentContainerStyle={[styles.content, { paddingBottom: safeAreaSpacing.paddingBottom }]}
             showsVerticalScrollIndicator={false}
+            style={styles.scroll}
           >
             <View style={styles.recapHeader}>
               <HomePanelFill source={reviewPanelSwatch} opacity={1} />
@@ -243,7 +251,7 @@ export function SessionRecap({
             </Pressable>
           </ScrollView>
         </View>
-      </SafeAreaView>
+      </View>
     </ImageBackground>
   );
 }
@@ -253,11 +261,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   safeArea: {
+    alignItems: 'center',
     flex: 1,
   },
   frame: {
+    alignSelf: 'center',
     flex: 1,
-    paddingHorizontal: SPACING.md,
+    flexShrink: 0,
+    maxWidth: 434,
+    width: '100%',
   },
   header: {
     alignItems: 'center',
@@ -278,8 +290,13 @@ const styles = StyleSheet.create({
     width: 150,
   },
   content: {
+    alignItems: 'stretch',
     gap: SPACING.md,
-    paddingBottom: 24,
+    flexGrow: 1,
+  },
+  scroll: {
+    flex: 1,
+    width: '100%',
   },
   recapHeader: {
     backgroundColor: COLORS.reviewPaper,
@@ -470,6 +487,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     justifyContent: 'center',
     minHeight: 48,
+    width: '100%',
   },
   backToReviewText: {
     color: COLORS.reviewDeep,

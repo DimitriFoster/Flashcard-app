@@ -355,79 +355,20 @@ export function moveNoteToNotebook(noteId: string, notebookId: string) {
   };
 }
 
-/**
- * Group notes by dropping one note onto another note.
- *
- * Rules:
- * - If neither note is in a notebook, create a new notebook containing both.
- * - If one note is already in a notebook, move the other into that notebook.
- * - If both notes are in different notebooks, merge the source notebook into the target notebook.
- */
-export function groupNotesIntoNotebook(sourceNoteId: string, targetNoteId: string) {
-  if (!canUseStorage() || sourceNoteId === targetNoteId) {
-    return undefined;
-  }
-
-  const notes = getNotes();
-  const notebooks = getNotebooks();
-  const sourceNote = notes.find((note) => note.id === sourceNoteId);
-  const targetNote = notes.find((note) => note.id === targetNoteId);
-
-  if (!sourceNote || !targetNote) {
+export function createNotebook(name: string) {
+  if (!canUseStorage()) {
     return undefined;
   }
 
   const now = new Date().toISOString();
-  const targetNotebook = targetNote.notebookId
-    ? notebooks.find((notebook) => notebook.id === targetNote.notebookId)
-    : undefined;
-
-  /**
-   * Important drag rule:
-   * If a note is dragged out of a notebook onto a loose note, create a new
-   * notebook for just those two notes. Do not pull the target note back into the
-   * source note's old notebook.
-   */
-  const notebookId = targetNotebook?.id ?? createId('notebook');
-  const notebookName = targetNotebook?.name ?? 'Notebook';
-  const notebookCreatedAt = targetNotebook?.createdAt ?? now;
-
-  const nextNotes = notes.map((note) => {
-    const shouldMove = note.id === sourceNoteId || note.id === targetNoteId;
-
-    return shouldMove
-      ? {
-          ...note,
-          notebookId,
-          updatedAt: now,
-        }
-      : note;
-  });
-
-  const nextNotebook: Notebook = {
-    id: notebookId,
-    name: notebookName,
-    createdAt: notebookCreatedAt,
+  const notebook: Notebook = {
+    id: createId('notebook'),
+    name: name.trim() || 'Notebook',
+    createdAt: now,
     updatedAt: now,
   };
 
-  const occupiedNotebookIds = new Set(
-    nextNotes
-      .map((note) => note.notebookId)
-      .filter((id): id is string => Boolean(id))
-  );
+  saveNotebooks([notebook, ...getNotebooks()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
 
-  const nextNotebooks = [
-    nextNotebook,
-    ...notebooks.filter((notebook) => notebook.id !== notebookId && occupiedNotebookIds.has(notebook.id)),
-  ];
-
-  saveNotes(nextNotes.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
-  saveNotebooks(nextNotebooks.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
-
-  return {
-    notes: getNotes(),
-    notebooks: getNotebooks(),
-    notebook: nextNotebook,
-  };
+  return notebook;
 }

@@ -29,6 +29,11 @@ export type SessionRecapOptions = {
   dailyNewCardLimit?: number;
 };
 
+export type SessionRecapSafeAreaInsets = {
+  top: number;
+  bottom: number;
+};
+
 export type ReviewGradeCounts = Record<ReviewGrade, number>;
 
 export type SessionCompletionInput = {
@@ -41,6 +46,17 @@ export type SessionCompletionInput = {
 const MINUTE_MS = 60_000;
 const SOON_WINDOW_MINUTES = 10;
 const TIME_SEPARATOR = ' \u2014 ';
+
+export function getSessionRecapPageWidth(windowWidth: number) {
+  return Math.min(windowWidth - 18, 434);
+}
+
+export function getSessionRecapSafeAreaSpacing(insets: SessionRecapSafeAreaInsets) {
+  return {
+    paddingTop: insets.top + 4,
+    paddingBottom: insets.bottom + 16,
+  };
+}
 
 function startOfLocalDay(now: Date) {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());

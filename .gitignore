@@ -30,8 +30,10 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# local env files and credentials
+.env
+.env.*
+!.env.example
 
 # typescript
 *.tsbuildinfo
@@ -44,11 +46,30 @@ app-example
 .aider*
 .claude/
 CLAUDE.md
+.agents/
+.codex/
+.vscode/
+/AGENTS.md
+/PROJECT_LOG.md
+/Docs/
+/flashcard-ui-warm-snappy/
+/tools/
+/scripts/
+/src/components/folio/
+/src/folio-browse/
+/src/folio-review/FolioReviewScreen.tsx
+/src/folio-review/types.ts
+/src/folio-review/index.ts
+/src/components/review/preview-panel.tsx
+/src/app/maestro-seed.tsx
+/src/storage/maestro-fixtures.ts
+/src/**/*.js
+/assets/
 
-# Maestro local run artifacts (keep .maestro flows and approved baselines tracked)
+# Local UI automation and run artifacts
 maestro-debug-output/
-.maestro/output/
-.maestro/reports/
+/.maestro/
 
 /Flashcard-app-export-*.zip
+/*.zip
 /.folio-backups/

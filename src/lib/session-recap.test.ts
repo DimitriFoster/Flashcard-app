@@ -3,6 +3,8 @@ import { getReviewQueue } from './review-queue';
 import {
   canRestartReviewSession,
   formatReviewCountdown,
+  getSessionRecapPageWidth,
+  getSessionRecapSafeAreaSpacing,
   shouldShowSessionRecap,
   summarizeSessionRecap,
   type SessionRecapSection,
@@ -65,6 +67,27 @@ type RecapTest = {
 };
 
 const tests: RecapTest[] = [
+  {
+    name: 'recap safe-area spacing applies the top inset once and preserves the bottom inset',
+    run: () => {
+      const spacing = getSessionRecapSafeAreaSpacing({ top: 24, bottom: 34 });
+
+      assertEqual(spacing.paddingTop, 28, 'recap top safe-area spacing');
+      assertEqual(spacing.paddingBottom, 50, 'recap bottom safe-area spacing');
+    },
+  },
+  {
+    name: 'recap page width keeps narrow margins and the normal maximum width',
+    run: () => {
+      assertEqual(getSessionRecapPageWidth(320), 302, '320px recap width');
+      assertEqual(getSessionRecapPageWidth(360), 342, '360px recap width');
+      assertEqual(getSessionRecapPageWidth(390), 372, '390px recap width');
+      assertEqual(getSessionRecapPageWidth(430), 412, '430px recap width');
+      assertEqual(getSessionRecapPageWidth(768), 434, 'tablet recap maximum width');
+      assertEqual(getSessionRecapPageWidth(1024), 434, 'landscape tablet recap maximum width');
+      assertEqual(getSessionRecapPageWidth(1280), 434, 'desktop recap maximum width');
+    },
+  },
   {
     name: 'a completed due session enters recap after the final grade',
     run: () => {

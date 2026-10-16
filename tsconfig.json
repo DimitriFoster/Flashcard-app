@@ -12,9 +12,19 @@
     }
   },
   "include": [
-    "**/*.ts",
-    "**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
+  ],
+  "exclude": [
+    "src/app/maestro-seed.tsx",
+    "src/storage/maestro-fixtures.ts",
+    "src/components/folio/**",
+    "src/folio-browse/**",
+    "src/folio-review/FolioReviewScreen.tsx",
+    "src/folio-review/types.ts",
+    "src/folio-review/index.ts",
+    "src/components/review/preview-panel.tsx"
   ]
 }

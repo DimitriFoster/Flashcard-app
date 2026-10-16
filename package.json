@@ -4,13 +4,10 @@
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
-    "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint",
-    "maestro:smoke": "maestro test .maestro/smoke",
-    "maestro:visual": "echo \"Visual baselines are not captured yet. Add .maestro/visual flows after screens are approved.\""
+    "lint": "expo lint"
   },
   "dependencies": {
     "@expo-google-fonts/short-stack": "^0.4.1",

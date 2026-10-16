@@ -10,9 +10,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
+  Image,
+  ImageBackground,
   Keyboard,
   KeyboardAvoidingView,
-  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -26,12 +27,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HomePanelFill } from '@/components/home/home-panel-fill';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/design';
+import { folioReviewAssets } from '@/folio-review/folioReviewAssets';
 import {
   deleteNotebook as deleteStoredNotebook,
   deleteNote as deleteStoredNote,
+  createNotebook,
   getNotebooks,
   getNotes,
-  groupNotesIntoNotebook,
   moveNoteOutOfNotebook,
   moveNoteToNotebook,
   renameNotebook,
@@ -43,15 +45,6 @@ const notesPanelSwatch = require('../../../assets/folio-ui/home-page/swatches/ho
 
 const NOTEBOOK_LINE_HEIGHT = 28;
 const NOTEBOOK_TEXT_TOP_PADDING = 47;
-
-type DropTarget = {
-  id: string;
-  type: 'note' | 'notebook';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
 
 type SortDirection = 'newest' | 'oldest';
 type NoteCardVariant = 'sidebar' | 'overview';
@@ -100,191 +93,195 @@ function sortNotesByCreatedAt(notes: StudyNote[], direction: SortDirection) {
 }
 
 
-type DraggableNoteCardProps = {
+type NoteCardProps = {
   note: StudyNote;
   variant?: NoteCardVariant;
   nested?: boolean;
   isActive?: boolean;
-  isDragging?: boolean;
-  isDropTarget?: boolean;
+  isNotebookPickerOpen?: boolean;
+  currentNotebook?: Notebook;
+  notebooks?: Notebook[];
+  notebookCounts?: Record<string, number>;
+  isCreatingNotebook?: boolean;
+  notebookNameDraft?: string;
   onOpen: (note: StudyNote) => void;
   onDelete: (note: StudyNote) => void;
-  onDragStart: (note: StudyNote, pageX: number, pageY: number) => void;
-  onDragMove: (pageX: number, pageY: number) => void;
-  onDragEnd: (note: StudyNote, pageX: number, pageY: number) => void;
-  setRef: (ref: View | null) => void;
+  onToggleNotebookPicker?: (noteId: string) => void;
+  onAssignNotebook?: (noteId: string, notebookId: string) => void;
+  onRemoveFromNotebook?: (noteId: string) => void;
+  onStartCreateNotebook?: (noteId: string) => void;
+  onCancelCreateNotebook?: () => void;
+  onNotebookNameChange?: (value: string) => void;
+  onCreateNotebook?: (noteId: string) => void;
 };
 
-function DraggableNoteCard({
+type NoteCardVisualProps = {
+  note: StudyNote;
+  variant?: NoteCardVariant;
+  isActive?: boolean;
+};
+
+function NoteCardVisual({ note, variant = 'sidebar', isActive = false }: NoteCardVisualProps) {
+  if (variant === 'overview') {
+    return (
+      <View style={styles.notebookNoteTextGroup}>
+        <Text numberOfLines={2} style={styles.notebookNoteTitle}>
+          {note.title}
+        </Text>
+        <Text numberOfLines={3} style={styles.notebookNotePreview}>
+          {getPreview(note.body)}
+        </Text>
+        <Text style={styles.noteListDate}>{formatUpdatedAt(note.createdAt)}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <Text numberOfLines={2} style={[styles.noteListTitle, isActive && styles.noteListTitleActive]}>
+        {note.title}
+      </Text>
+      <Text numberOfLines={2} style={styles.noteListPreview}>
+        {getPreview(note.body)}
+      </Text>
+      <Text style={styles.noteListDate}>{formatUpdatedAt(note.updatedAt)}</Text>
+    </>
+  );
+}
+
+function NoteCard({
   note,
   variant = 'sidebar',
   nested = false,
   isActive = false,
-  isDragging = false,
-  isDropTarget = false,
+  isNotebookPickerOpen = false,
+  currentNotebook,
+  notebooks = [],
+  notebookCounts = {},
+  isCreatingNotebook = false,
+  notebookNameDraft = '',
   onOpen,
   onDelete,
-  onDragStart,
-  onDragMove,
-  onDragEnd,
-  setRef,
-}: DraggableNoteCardProps) {
-  const drag = useRef(new Animated.ValueXY()).current;
-  const lift = useRef(new Animated.Value(0)).current;
-  const longPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const localDraggingRef = useRef(false);
-  const lastPageRef = useRef({ x: 0, y: 0 });
-  const [isLocallyDragging, setIsLocallyDragging] = useState(false);
-
-  function clearLongPressTimer() {
-    if (longPressTimeoutRef.current) {
-      clearTimeout(longPressTimeoutRef.current);
-      longPressTimeoutRef.current = null;
-    }
-  }
-
-  function startDrag() {
-    if (localDraggingRef.current) {
-      return;
-    }
-
-    localDraggingRef.current = true;
-    setIsLocallyDragging(true);
-    onDragStart(note, lastPageRef.current.x, lastPageRef.current.y);
-
-    Animated.spring(lift, {
-      toValue: 1,
-      useNativeDriver: true,
-      speed: 20,
-      bounciness: 8,
-    }).start();
-  }
-
-  function resetDrag() {
-    clearLongPressTimer();
-
-    Animated.parallel([
-      Animated.spring(drag, {
-        toValue: { x: 0, y: 0 },
-        useNativeDriver: true,
-        speed: 20,
-        bounciness: 7,
-      }),
-      Animated.spring(lift, {
-        toValue: 0,
-        useNativeDriver: true,
-        speed: 20,
-        bounciness: 7,
-      }),
-    ]).start(() => {
-      drag.setValue({ x: 0, y: 0 });
-      localDraggingRef.current = false;
-      setIsLocallyDragging(false);
-    });
-  }
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (event) => {
-        lastPageRef.current = {
-          x: event.nativeEvent.pageX,
-          y: event.nativeEvent.pageY,
-        };
-        drag.setValue({ x: 0, y: 0 });
-        longPressTimeoutRef.current = setTimeout(startDrag, 260);
-      },
-      onPanResponderMove: (_event, gestureState) => {
-        const movedFarEnough = Math.abs(gestureState.dx) > 8 || Math.abs(gestureState.dy) > 8;
-
-        if (!localDraggingRef.current && movedFarEnough) {
-          clearLongPressTimer();
-        }
-
-        if (localDraggingRef.current) {
-          lastPageRef.current = { x: gestureState.moveX, y: gestureState.moveY };
-          drag.setValue({ x: gestureState.dx, y: gestureState.dy });
-          onDragMove(gestureState.moveX, gestureState.moveY);
-        }
-      },
-      onPanResponderRelease: (_event, gestureState) => {
-        clearLongPressTimer();
-
-        if (localDraggingRef.current) {
-          onDragEnd(note, gestureState.moveX, gestureState.moveY);
-          resetDrag();
-          return;
-        }
-
-        const wasTap = Math.abs(gestureState.dx) < 8 && Math.abs(gestureState.dy) < 8;
-
-        if (wasTap) {
-          onOpen(note);
-        }
-
-        resetDrag();
-      },
-      onPanResponderTerminate: () => {
-        clearLongPressTimer();
-        resetDrag();
-      },
-      onShouldBlockNativeResponder: () => false,
-    })
-  ).current;
-
-  const liftedScale = lift.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.035],
-  });
-  const liftedY = lift.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -4],
-  });
+  onToggleNotebookPicker,
+  onAssignNotebook,
+  onRemoveFromNotebook,
+  onStartCreateNotebook,
+  onCancelCreateNotebook,
+  onNotebookNameChange,
+  onCreateNotebook,
+}: NoteCardProps) {
+  const showNotebookControls = variant === 'sidebar';
 
   return (
-    <Animated.View
-      ref={(ref) => setRef(ref as unknown as View | null)}
+    <View
       style={[
         variant === 'overview' ? styles.notebookNoteCard : styles.noteListItem,
         nested && styles.noteListItemNested,
         isActive && styles.noteListItemActive,
-        isDropTarget && styles.noteListItemDropTarget,
-        (isDragging || isLocallyDragging) && styles.noteListItemDragging,
-        {
-          opacity: isDragging || isLocallyDragging ? 0.12 : 1,
-          transform: [{ scale: liftedScale }],
-          zIndex: isDragging || isLocallyDragging ? 20 : 1,
-          elevation: isDragging || isLocallyDragging ? 8 : variant === 'overview' ? 1 : 0,
-        },
       ]}>
-      <View
-        {...panResponder.panHandlers}
-        style={variant === 'overview' ? styles.notebookNoteDragArea : styles.notePressArea}>
-        {variant === 'overview' ? (
-          <View style={styles.notebookNoteTextGroup}>
-            <Text numberOfLines={2} style={styles.notebookNoteTitle}>
-              {note.title}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Open note ${note.title}`}
+        onPress={() => onOpen(note)}
+        style={({ pressed }) => [
+          variant === 'overview' ? styles.notebookNotePressArea : styles.notePressArea,
+          pressed && styles.pressed,
+        ]}>
+        <NoteCardVisual note={note} variant={variant} isActive={isActive} />
+      </Pressable>
+
+      {showNotebookControls ? (
+        <>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={currentNotebook ? `Change notebook for ${note.title}` : `Add ${note.title} to a notebook`}
+            onPress={() => onToggleNotebookPicker?.(note.id)}
+            style={({ pressed }) => [styles.notebookAssignmentButton, pressed && styles.pressed]}>
+            <Text numberOfLines={1} ellipsizeMode="tail" style={styles.notebookAssignmentButtonText}>
+              {currentNotebook ? `Notebook - ${currentNotebook.name}` : 'Add to notebook'}
             </Text>
-            <Text numberOfLines={3} style={styles.notebookNotePreview}>
-              {getPreview(note.body)}
-            </Text>
-            <Text style={styles.noteListDate}>{formatUpdatedAt(note.createdAt)}</Text>
-          </View>
-        ) : (
-          <>
-            <Text
-              numberOfLines={2}
-              style={[styles.noteListTitle, isActive && styles.noteListTitleActive]}>
-              {note.title}
-            </Text>
-            <Text numberOfLines={2} style={styles.noteListPreview}>
-              {getPreview(note.body)}
-            </Text>
-            <Text style={styles.noteListDate}>{formatUpdatedAt(note.updatedAt)}</Text>
-          </>
-        )}
-      </View>
+          </Pressable>
+
+          {isNotebookPickerOpen ? (
+            <View style={styles.notebookPicker}>
+              <Text style={styles.notebookPickerTitle}>Choose a notebook</Text>
+              {notebooks.map((notebook) => {
+                const isCurrent = notebook.id === currentNotebook?.id;
+                const count = notebookCounts[notebook.id] ?? 0;
+
+                return (
+                  <Pressable
+                    key={notebook.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${isCurrent ? 'Current notebook' : 'Move note to'} ${notebook.name}`}
+                    onPress={() => onAssignNotebook?.(note.id, notebook.id)}
+                    style={({ pressed }) => [
+                      styles.notebookPickerOption,
+                      isCurrent && styles.notebookPickerOptionCurrent,
+                      pressed && styles.pressed,
+                    ]}>
+                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.notebookPickerOptionName}>
+                      {notebook.name}
+                    </Text>
+                    <Text style={styles.notebookPickerOptionMeta}>
+                      {isCurrent ? 'Current' : `${count} ${count === 1 ? 'note' : 'notes'}`}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+
+              {currentNotebook ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${note.title} from ${currentNotebook.name}`}
+                  onPress={() => onRemoveFromNotebook?.(note.id)}
+                  style={({ pressed }) => [styles.notebookPickerRemove, pressed && styles.pressed]}>
+                  <Text style={styles.notebookPickerRemoveText}>Remove from notebook</Text>
+                </Pressable>
+              ) : null}
+
+              {isCreatingNotebook ? (
+                <View style={styles.notebookCreateForm}>
+                  <TextInput
+                    accessibilityLabel="New notebook name"
+                    autoFocus
+                    maxLength={36}
+                    onChangeText={onNotebookNameChange}
+                    placeholder="Notebook name"
+                    placeholderTextColor={COLORS.muted}
+                    style={styles.notebookCreateInput}
+                    value={notebookNameDraft}
+                  />
+                  <View style={styles.notebookCreateActions}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Cancel new notebook"
+                      onPress={onCancelCreateNotebook}
+                      style={({ pressed }) => [styles.notebookCreateCancel, pressed && styles.pressed]}>
+                      <Text style={styles.notebookCreateCancelText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Create notebook"
+                      onPress={() => onCreateNotebook?.(note.id)}
+                      style={({ pressed }) => [styles.notebookCreateSubmit, pressed && styles.pressed]}>
+                      <Text style={styles.notebookCreateSubmitText}>Create</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Create a new notebook for ${note.title}`}
+                  onPress={() => onStartCreateNotebook?.(note.id)}
+                  style={({ pressed }) => [styles.newNotebookButton, pressed && styles.pressed]}>
+                  <Text style={styles.newNotebookButtonText}>+ New notebook</Text>
+                </Pressable>
+              )}
+            </View>
+          ) : null}
+        </>
+      ) : null}
 
       <Pressable
         accessibilityRole="button"
@@ -293,7 +290,228 @@ function DraggableNoteCard({
         style={({ pressed }) => [styles.deleteNoteButton, pressed && styles.pressed]}>
         <Text style={styles.deleteNoteButtonText}>×</Text>
       </Pressable>
-    </Animated.View>
+    </View>
+  );
+}
+
+type NotesPresentationProps = {
+  isEditorOpen: boolean;
+  isNotebookOverviewOpen: boolean;
+  isKeyboardVisible: boolean;
+  isDirty: boolean;
+  notes: StudyNote[];
+  notebookGroups: { notebook: Notebook; notes: StudyNote[] }[];
+  selectedNote?: StudyNote;
+  selectedNotebook?: Notebook;
+  quickCaptureBody: string;
+  saveStatusMessage: string;
+  onQuickCaptureChange: (value: string) => void;
+  onQuickCaptureSave: () => void;
+  onOpenBlankNote: () => void;
+  onLeaveNotes: () => void;
+  onBackToNotes: () => void;
+  onSaveCurrentNote: () => void;
+  onDeleteSelectedNote: (note: StudyNote) => void;
+  renderEditor: () => React.ReactNode;
+  renderNote: (note: StudyNote) => React.ReactNode;
+  renderNotebook: (group: { notebook: Notebook; notes: StudyNote[] }) => React.ReactNode;
+};
+
+function NotesPresentation({
+  isDirty,
+  isEditorOpen,
+  isKeyboardVisible,
+  isNotebookOverviewOpen,
+  notebookGroups,
+  notes,
+  onBackToNotes,
+  onDeleteSelectedNote,
+  onLeaveNotes,
+  onOpenBlankNote,
+  onQuickCaptureChange,
+  onQuickCaptureSave,
+  onSaveCurrentNote,
+  quickCaptureBody,
+  renderEditor,
+  renderNotebook,
+  renderNote,
+  saveStatusMessage,
+  selectedNote,
+  selectedNotebook,
+}: NotesPresentationProps) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <ImageBackground source={folioReviewAssets.background.pagePaper} resizeMode="cover" style={styles.screen}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+        style={styles.screen}>
+        <View style={styles.screenRoot}>
+          <View
+            style={[
+              styles.notesPage,
+              {
+                paddingTop: insets.top + 8,
+                paddingBottom: isKeyboardVisible ? Math.max(insets.bottom, 12) : insets.bottom + 18,
+              },
+            ]}>
+          {isEditorOpen ? (
+            <>
+              <View style={styles.focusedHeader}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Back to Notes"
+                  onPress={onBackToNotes}
+                  style={({ pressed }) => [styles.notesBackButton, pressed && styles.pressed]}>
+                  <Text style={styles.notesBackButtonText}>‹ Notes</Text>
+                </Pressable>
+
+                <View style={styles.focusedHeaderTitle}>
+                  <Text style={styles.focusedEyebrow}>{isNotebookOverviewOpen ? 'NOTEBOOK' : 'FOCUSED EDITOR'}</Text>
+                  <Text numberOfLines={1} style={styles.focusedTitle}>
+                    {isNotebookOverviewOpen ? selectedNotebook?.name ?? 'Notebook' : selectedNote ? 'Edit note' : 'New note'}
+                  </Text>
+                </View>
+
+                {!isNotebookOverviewOpen ? (
+                  <View style={styles.focusedHeaderActions}>
+                    {selectedNote ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Delete ${selectedNote.title}`}
+                        onPress={() => onDeleteSelectedNote(selectedNote)}
+                        style={({ pressed }) => [styles.deleteHeaderButton, pressed && styles.pressed]}>
+                        <Text style={styles.deleteHeaderButtonText}>Delete</Text>
+                      </Pressable>
+                    ) : null}
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Save note"
+                      accessibilityState={{ disabled: !isDirty }}
+                      disabled={!isDirty}
+                      onPress={onSaveCurrentNote}
+                      style={({ pressed }) => [
+                        styles.primaryActionButton,
+                        !isDirty && styles.primaryActionButtonDisabled,
+                        pressed && styles.pressed,
+                      ]}>
+                      {isDirty ? <HomePanelFill source={notesPanelSwatch} opacity={1} /> : null}
+                      <Text style={[styles.primaryActionButtonText, !isDirty && styles.primaryActionButtonTextDisabled]}>Save note</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+
+              {saveStatusMessage ? (
+                <View pointerEvents="none" style={styles.saveStatusPill}>
+                  <Text style={styles.saveStatusText}>{saveStatusMessage}</Text>
+                </View>
+              ) : null}
+
+              <View style={styles.focusedEditorFrame}>{renderEditor()}</View>
+            </>
+          ) : (
+            <>
+              <View style={styles.notesHeader}>
+                <View style={styles.notesHeaderTop}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Back home"
+                    onPress={onLeaveNotes}
+                    style={({ pressed }) => [styles.homeButton, pressed && styles.pressed]}>
+                    <Text style={styles.homeButtonText}>Back home</Text>
+                  </Pressable>
+                  <Image source={folioReviewAssets.header.folioWordmark} resizeMode="contain" style={styles.notesWordmark} />
+                </View>
+                <View style={styles.notesHeaderCopy}>
+                  <Text style={styles.notesEyebrow}>NOTES</Text>
+                  <Text style={styles.notesTitle}>Thoughts worth keeping.</Text>
+                </View>
+              </View>
+
+              {saveStatusMessage ? (
+                <View pointerEvents="none" style={styles.saveStatusPill}>
+                  <Text style={styles.saveStatusText}>{saveStatusMessage}</Text>
+                </View>
+              ) : null}
+
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={notes.length > 5}
+                style={styles.landingScroll}
+                contentContainerStyle={styles.landingScrollContent}>
+                <View style={styles.quickCaptureCard}>
+                  <Text style={styles.sectionEyebrow}>QUICK NOTE</Text>
+                  <TextInput
+                    accessibilityLabel="Quick note capture"
+                    multiline
+                    onChangeText={onQuickCaptureChange}
+                    placeholder="Jot something down..."
+                    placeholderTextColor={COLORS.muted}
+                    style={styles.quickCaptureInput}
+                    textAlignVertical="top"
+                    testID="notes-quick-capture"
+                    value={quickCaptureBody}
+                  />
+                  <View style={styles.quickCaptureFooter}>
+                    <Text style={styles.quickCaptureHint}>A small thought is enough.</Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Save quick note"
+                      accessibilityState={{ disabled: !quickCaptureBody.trim() }}
+                      disabled={!quickCaptureBody.trim()}
+                      onPress={onQuickCaptureSave}
+                      style={({ pressed }) => [
+                        styles.primaryActionButton,
+                        !quickCaptureBody.trim() && styles.primaryActionButtonDisabled,
+                        pressed && styles.pressed,
+                      ]}
+                      testID="notes-quick-save">
+                      {quickCaptureBody.trim() ? <HomePanelFill source={notesPanelSwatch} opacity={1} /> : null}
+                      <Text style={[styles.primaryActionButtonText, !quickCaptureBody.trim() && styles.primaryActionButtonTextDisabled]}>Save note</Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                <View style={styles.sectionHeadingRow}>
+                  <View style={styles.sectionHeadingCopy}>
+                    <Text style={styles.sectionEyebrow}>RECENT NOTES</Text>
+                    <Text style={styles.sectionSupportingText}>{notes.length ? 'The thoughts you chose to keep.' : 'Your saved thoughts will live here.'}</Text>
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Create a new full note"
+                    onPress={onOpenBlankNote}
+                    style={({ pressed }) => [styles.newFullNoteButton, pressed && styles.pressed]}>
+                    <Text style={styles.newFullNoteButtonText}>+ New full note</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.recentNotesList}>
+                  {notes.map(renderNote)}
+                  {notes.length === 0 ? (
+                    <View style={styles.emptyNotesState}>
+                      <Text style={styles.emptyNotesText}>No saved notes yet. Start with a quick thought above.</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {notebookGroups.length > 0 ? (
+                  <View style={styles.notebookShortcuts}>
+                    <Text style={styles.sectionEyebrow}>NOTEBOOKS</Text>
+                    {notebookGroups.map(renderNotebook)}
+                  </View>
+                ) : null}
+
+              </ScrollView>
+            </>
+          )}
+          </View>
+
+        </View>
+      </KeyboardAvoidingView>
+    </ImageBackground>
   );
 }
 
@@ -308,25 +526,25 @@ export default function NotesScreen() {
   const [selectedNoteId, setSelectedNoteId] = useState<string | undefined>();
   const [selectedNotebookId, setSelectedNotebookId] = useState<string | undefined>();
   const [isNotebookOverviewOpen, setIsNotebookOverviewOpen] = useState(false);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [quickCaptureBody, setQuickCaptureBody] = useState('');
   const [body, setBody] = useState('');
-  const [draggingNoteId, setDraggingNoteId] = useState<string | undefined>();
-  const [hoverTargetId, setHoverTargetId] = useState<string | undefined>();
-  const [dragOverlay, setDragOverlay] = useState<{ note: StudyNote; x: number; y: number } | undefined>();
+  const [openNotebookPickerNoteId, setOpenNotebookPickerNoteId] = useState<string | null>(null);
+  const [isCreatingNotebook, setIsCreatingNotebook] = useState(false);
+  const [notebookNameDraft, setNotebookNameDraft] = useState('');
   const [editorViewportHeight, setEditorViewportHeight] = useState(0);
   const [editorContentHeight, setEditorContentHeight] = useState(0);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [pulseNotebookId, setPulseNotebookId] = useState<string | undefined>();
   const [notebookSortDirection, setNotebookSortDirection] = useState<SortDirection>('newest');
   const [saveStatusMessage, setSaveStatusMessage] = useState('');
   const [isSavedPanelOpen, setIsSavedPanelOpen] = useState(false);
   const [isEmptyNoteWarningVisible, setIsEmptyNoteWarningVisible] = useState(false);
 
-  const noteRefs = useRef<Record<string, View | null>>({});
-  const notebookRefs = useRef<Record<string, View | null>>({});
   const editorInputRef = useRef<TextInput | null>(null);
   const editorScrollRef = useRef<ScrollView | null>(null);
   const bodyRef = useRef('');
+  const quickCaptureBodyRef = useRef('');
   const selectedNoteIdRef = useRef<string | undefined>();
   const selectedNotebookIdRef = useRef<string | undefined>();
   const saveStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -335,9 +553,6 @@ export default function NotesScreen() {
   const editorScrollY = useRef(new Animated.Value(0)).current;
   const editorScrollOffsetRef = useRef(0);
   const editorSelectionRef = useRef({ start: 0, end: 0 });
-  const dropTargetsRef = useRef<DropTarget[]>([]);
-  const dragWasActiveRef = useRef(false);
-  const notebookPulse = useRef(new Animated.Value(0)).current;
 
   const [isEditorArmed, setIsEditorArmed] = useState(false);
 
@@ -363,6 +578,18 @@ export default function NotesScreen() {
   );
 
   const looseNotes = useMemo(() => notes.filter((note) => !note.notebookId), [notes]);
+
+  const notebookCounts = useMemo(
+    () =>
+      notes.reduce<Record<string, number>>((counts, note) => {
+        if (note.notebookId) {
+          counts[note.notebookId] = (counts[note.notebookId] ?? 0) + 1;
+        }
+
+        return counts;
+      }, {}),
+    [notes]
+  );
 
   const selectedNotebookNotes = useMemo(
     () =>
@@ -420,6 +647,7 @@ export default function NotesScreen() {
     setActiveNoteId(undefined);
     setActiveNotebookId(undefined);
     setIsNotebookOverviewOpen(false);
+    setIsEditorOpen(false);
     setIsSavedPanelOpen(false);
     setIsEditorArmed(false);
     editorScrollY.setValue(0);
@@ -427,6 +655,8 @@ export default function NotesScreen() {
     setEditorContentHeight(0);
     bodyRef.current = '';
     setDraftBody('');
+    quickCaptureBodyRef.current = '';
+    setQuickCaptureBody('');
   }, []);
 
   useEffect(() => {
@@ -510,9 +740,105 @@ export default function NotesScreen() {
     setSelectedNotebookId(notebookId);
   }
 
+  function closeNotebookPicker() {
+    setOpenNotebookPickerNoteId(null);
+    setIsCreatingNotebook(false);
+    setNotebookNameDraft('');
+  }
+
+  function toggleNotebookPicker(noteId: string) {
+    setOpenNotebookPickerNoteId((currentNoteId) => {
+      const nextNoteId = currentNoteId === noteId ? null : noteId;
+
+      setIsCreatingNotebook(false);
+      setNotebookNameDraft('');
+      return nextNoteId;
+    });
+  }
+
+  function startCreateNotebook(noteId: string) {
+    setOpenNotebookPickerNoteId(noteId);
+    setIsCreatingNotebook(true);
+    setNotebookNameDraft('');
+  }
+
+  function cancelCreateNotebook() {
+    setIsCreatingNotebook(false);
+    setNotebookNameDraft('');
+  }
+
+  function applyNotebookResult(result: ReturnType<typeof moveNoteToNotebook> | ReturnType<typeof moveNoteOutOfNotebook>) {
+    if (!result) {
+      showSaveStatus('Could not update notebook');
+      return false;
+    }
+
+    setNotes(result.notes);
+    setNotebooks(result.notebooks);
+    setNotebookNameDrafts(createNotebookDrafts(result.notebooks));
+    closeNotebookPicker();
+    return true;
+  }
+
+  function assignNoteToNotebook(noteId: string, notebookId: string) {
+    applyNotebookResult(moveNoteToNotebook(noteId, notebookId));
+  }
+
+  function removeNoteFromNotebook(noteId: string) {
+    applyNotebookResult(moveNoteOutOfNotebook(noteId));
+  }
+
+  function createNotebookForNote(noteId: string) {
+    const name = notebookNameDraft.trim();
+
+    if (!name) {
+      showSaveStatus('Name your notebook');
+      return;
+    }
+
+    const notebook = createNotebook(name);
+
+    if (!notebook) {
+      showSaveStatus('Could not create notebook');
+      return;
+    }
+
+    const moved = moveNoteToNotebook(noteId, notebook.id);
+
+    if (!applyNotebookResult(moved)) {
+      showSaveStatus('Could not add note to notebook');
+    }
+  }
+
   function setDraftBody(value: string) {
     bodyRef.current = value;
     setBody(value);
+  }
+
+  function setQuickCaptureDraft(value: string) {
+    quickCaptureBodyRef.current = value;
+    setQuickCaptureBody(value);
+  }
+
+  function saveQuickCapture() {
+    const draft = quickCaptureBodyRef.current;
+
+    if (!draft.trim()) {
+      return;
+    }
+
+    const savedNote = saveNote({ body: draft });
+    const refreshed = refreshNotesState();
+    const verifiedNote = refreshed.notes.find((note) => note.id === savedNote.id);
+
+    if (!verifiedNote) {
+      showSaveStatus('Save failed');
+      return;
+    }
+
+    quickCaptureBodyRef.current = '';
+    setQuickCaptureBody('');
+    showSaveStatus('Saved');
   }
 
   function showSaveStatus(message = 'Saved') {
@@ -643,6 +969,7 @@ export default function NotesScreen() {
     setActiveNoteId(latestNote.id);
     setActiveNotebookId(latestNote.notebookId);
     setIsNotebookOverviewOpen(false);
+    setIsEditorOpen(true);
     setIsEditorArmed(false);
     editorScrollY.setValue(0);
     editorScrollOffsetRef.current = 0;
@@ -652,23 +979,28 @@ export default function NotesScreen() {
   }
 
   function openBlankNote() {
-    if (isBlankNewNoteDraft()) {
+    closeNotebookPicker();
+
+    if (isEditorOpen && isBlankNewNoteDraft()) {
       pulseEmptyNoteActions();
       showSaveStatus('Already blank');
       return;
     }
 
-    if (shouldPersistCurrentDraft()) {
+    if (isEditorOpen && shouldPersistCurrentDraft()) {
       persistCurrentDraft();
     }
 
     setActiveNoteId(undefined);
     setActiveNotebookId(undefined);
     setIsNotebookOverviewOpen(false);
+    setIsEditorOpen(true);
     setDraftBody('');
   }
 
   function openBlankNoteInNotebook(notebook: Notebook) {
+    closeNotebookPicker();
+
     if (shouldPersistCurrentDraft()) {
       persistCurrentDraft();
     }
@@ -676,6 +1008,7 @@ export default function NotesScreen() {
     setActiveNoteId(undefined);
     setActiveNotebookId(notebook.id);
     setIsNotebookOverviewOpen(false);
+    setIsEditorOpen(true);
     setIsEditorArmed(false);
     editorScrollY.setValue(0);
     editorScrollOffsetRef.current = 0;
@@ -685,6 +1018,8 @@ export default function NotesScreen() {
   }
 
   function openNotebook(notebook: Notebook) {
+    closeNotebookPicker();
+
     if (shouldPersistCurrentDraft()) {
       persistCurrentDraft();
     }
@@ -692,6 +1027,7 @@ export default function NotesScreen() {
     setActiveNoteId(undefined);
     setActiveNotebookId(notebook.id);
     setIsNotebookOverviewOpen(true);
+    setIsEditorOpen(true);
     setIsEditorArmed(false);
     editorScrollY.setValue(0);
     setEditorContentHeight(0);
@@ -699,13 +1035,7 @@ export default function NotesScreen() {
   }
 
   function openExistingNote(note: StudyNote) {
-    /**
-     * Long-press drag can still trigger a normal press on some mobile devices.
-     * This guard prevents a drag gesture from also opening the note.
-     */
-    if (dragWasActiveRef.current) {
-      return;
-    }
+    closeNotebookPicker();
 
     const currentNoteId = selectedNoteIdRef.current ?? selectedNoteId;
 
@@ -845,6 +1175,8 @@ export default function NotesScreen() {
   }
 
   function goHome() {
+    closeNotebookPicker();
+
     if (!isDirty) {
       router.replace('/');
       return;
@@ -867,6 +1199,39 @@ export default function NotesScreen() {
     ]);
   }
 
+  function goBackToNotes() {
+    closeNotebookPicker();
+
+    if (!isDirty) {
+      setIsEditorOpen(false);
+      setIsNotebookOverviewOpen(false);
+      setIsEditorArmed(false);
+      return;
+    }
+
+    Alert.alert('Leave note?', 'You have unsaved note changes.', [
+      { text: 'Keep editing', style: 'cancel' },
+      {
+        text: 'Save & return',
+        onPress: () => {
+          persistCurrentDraft();
+          setIsEditorOpen(false);
+          setIsNotebookOverviewOpen(false);
+          setIsEditorArmed(false);
+        },
+      },
+      {
+        text: 'Discard changes',
+        style: 'destructive',
+        onPress: () => {
+          setIsEditorOpen(false);
+          setIsNotebookOverviewOpen(false);
+          setIsEditorArmed(false);
+        },
+      },
+    ]);
+  }
+
   function confirmDeleteNote(note: StudyNote) {
     Alert.alert('Delete note?', `Delete "${note.title}"? This cannot be undone.`, [
       { text: 'Cancel', style: 'cancel' },
@@ -881,8 +1246,10 @@ export default function NotesScreen() {
 
             if (wasSelected) {
               setActiveNoteId(undefined);
+              setActiveNotebookId(undefined);
               setDraftBody('');
-              setIsNotebookOverviewOpen(Boolean(note.notebookId));
+              setIsNotebookOverviewOpen(false);
+              setIsEditorOpen(false);
             }
           }
         },
@@ -917,145 +1284,6 @@ export default function NotesScreen() {
     );
   }
 
-  function measureDropTargets(sourceNoteId: string) {
-    const targets: DropTarget[] = [];
-    const noteEntries = Object.entries(noteRefs.current).filter(
-      (entry): entry is [string, View] => Boolean(entry[1]) && entry[0] !== sourceNoteId
-    );
-    const notebookEntries = Object.entries(notebookRefs.current).filter(
-      (entry): entry is [string, View] => Boolean(entry[1])
-    );
-    const totalMeasurements = noteEntries.length + notebookEntries.length;
-
-    if (totalMeasurements === 0) {
-      dropTargetsRef.current = [];
-      return;
-    }
-
-    let remaining = totalMeasurements;
-
-    function recordTarget(target: DropTarget) {
-      targets.push(target);
-      remaining -= 1;
-
-      if (remaining === 0) {
-        dropTargetsRef.current = targets;
-      }
-    }
-
-    noteEntries.forEach(([noteId, ref]) => {
-      ref.measureInWindow((x, y, targetWidth, height) => {
-        recordTarget({ id: noteId, type: 'note', x, y, width: targetWidth, height });
-      });
-    });
-
-    notebookEntries.forEach(([notebookId, ref]) => {
-      ref.measureInWindow((x, y, targetWidth, height) => {
-        recordTarget({ id: notebookId, type: 'notebook', x, y, width: targetWidth, height });
-      });
-    });
-  }
-
-  function getDropTargetAt(pageX: number, pageY: number) {
-    return dropTargetsRef.current.find((target) => {
-      const hitSlop = target.type === 'notebook' ? 26 : 18;
-
-      return (
-        pageX >= target.x - hitSlop &&
-        pageX <= target.x + target.width + hitSlop &&
-        pageY >= target.y - hitSlop &&
-        pageY <= target.y + target.height + hitSlop
-      );
-    });
-  }
-
-  function pulseNotebook(notebookId: string) {
-    setPulseNotebookId(notebookId);
-    notebookPulse.setValue(0);
-
-    Animated.sequence([
-      Animated.timing(notebookPulse, {
-        toValue: 1,
-        duration: 140,
-        useNativeDriver: true,
-      }),
-      Animated.timing(notebookPulse, {
-        toValue: 0,
-        duration: 160,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setPulseNotebookId(undefined);
-    });
-  }
-
-  function startDraggingNote(note: StudyNote, pageX: number, pageY: number) {
-    dragWasActiveRef.current = true;
-    setDraggingNoteId(note.id);
-    setHoverTargetId(undefined);
-    setDragOverlay({ note, x: pageX, y: pageY });
-    measureDropTargets(note.id);
-  }
-
-  function moveDragHover(pageX: number, pageY: number) {
-    const target = getDropTargetAt(pageX, pageY);
-    setHoverTargetId(target?.id);
-    setDragOverlay((current) => (current ? { ...current, x: pageX, y: pageY } : current));
-  }
-
-  function finishDraggingNote(sourceNote: StudyNote, pageX: number, pageY: number) {
-    const target = getDropTargetAt(pageX, pageY);
-
-    if (target?.type === 'note') {
-      const result = groupNotesIntoNotebook(sourceNote.id, target.id);
-
-      if (result) {
-        setNotes(result.notes);
-        setNotebooks(result.notebooks);
-        setNotebookNameDrafts(createNotebookDrafts(result.notebooks));
-        pulseNotebook(result.notebook.id);
-      }
-    } else if (target?.type === 'notebook') {
-      const result = moveNoteToNotebook(sourceNote.id, target.id);
-
-      if (result) {
-        setNotes(result.notes);
-        setNotebooks(result.notebooks);
-        setNotebookNameDrafts(createNotebookDrafts(result.notebooks));
-        pulseNotebook(target.id);
-      }
-    } else if (sourceNote.notebookId) {
-      const result = moveNoteOutOfNotebook(sourceNote.id);
-
-      if (result) {
-        setNotes(result.notes);
-        setNotebooks(result.notebooks);
-        setNotebookNameDrafts(createNotebookDrafts(result.notebooks));
-
-        if ((selectedNoteIdRef.current ?? selectedNoteId) === sourceNote.id) {
-          setActiveNotebookId(undefined);
-        }
-      }
-    }
-
-    endDragGesture();
-  }
-
-  function endDragGesture() {
-    setDraggingNoteId(undefined);
-    setHoverTargetId(undefined);
-    setDragOverlay(undefined);
-    dropTargetsRef.current = [];
-
-    /**
-     * Wait a beat before allowing normal presses again. This prevents a completed
-     * long-press/drop from also opening the note that started the gesture.
-     */
-    setTimeout(() => {
-      dragWasActiveRef.current = false;
-    }, 160);
-  }
-
   function saveNotebookName(notebook: Notebook) {
     const draftName = notebookNameDrafts[notebook.id] ?? notebook.name;
     const nextName = draftName.trim().length > 0 ? draftName : 'Notebook';
@@ -1076,49 +1304,41 @@ export default function NotesScreen() {
 
   function renderNoteListItem(note: StudyNote, variant: NoteCardVariant = 'sidebar') {
     const isActive = note.id === selectedNoteId;
-    const isDragging = note.id === draggingNoteId;
-    const isDropTarget = note.id === hoverTargetId && note.id !== draggingNoteId;
 
     return (
-      <DraggableNoteCard
+      <NoteCard
         key={note.id}
         note={note}
         variant={variant}
         isActive={isActive}
-        isDragging={isDragging}
-        isDropTarget={isDropTarget}
+        isNotebookPickerOpen={openNotebookPickerNoteId === note.id}
+        currentNotebook={notebooks.find((notebook) => notebook.id === note.notebookId)}
+        notebooks={notebooks}
+        notebookCounts={notebookCounts}
+        isCreatingNotebook={isCreatingNotebook && openNotebookPickerNoteId === note.id}
+        notebookNameDraft={notebookNameDraft}
         onOpen={openExistingNote}
         onDelete={confirmDeleteNote}
-        onDragStart={startDraggingNote}
-        onDragMove={moveDragHover}
-        onDragEnd={finishDraggingNote}
-        setRef={(ref) => {
-          noteRefs.current[note.id] = ref;
-        }}
+        onToggleNotebookPicker={toggleNotebookPicker}
+        onAssignNotebook={assignNoteToNotebook}
+        onRemoveFromNotebook={removeNoteFromNotebook}
+        onStartCreateNotebook={startCreateNotebook}
+        onCancelCreateNotebook={cancelCreateNotebook}
+        onNotebookNameChange={setNotebookNameDraft}
+        onCreateNotebook={createNotebookForNote}
       />
     );
   }
 
   function renderNotebookListItem(group: { notebook: Notebook; notes: StudyNote[] }) {
     const isActive = group.notebook.id === selectedNotebookId;
-    const isDropTarget = group.notebook.id === hoverTargetId;
-    const shouldPulse = group.notebook.id === pulseNotebookId;
-    const pulseScale = notebookPulse.interpolate({
-      inputRange: [0, 0.5, 1],
-      outputRange: [1, 1.045, 1],
-    });
 
     return (
-      <Animated.View
+      <View
         key={group.notebook.id}
-        ref={(ref) => {
-          notebookRefs.current[group.notebook.id] = ref;
-        }}
         style={[
           styles.notebookListItem,
           isActive && styles.notebookListItemActive,
-          isDropTarget && styles.notebookListItemDropTarget,
-          shouldPulse && { transform: [{ scale: pulseScale }] },
         ]}>
         <Pressable
           accessibilityRole="button"
@@ -1137,7 +1357,7 @@ export default function NotesScreen() {
             </Text>
           </View>
         </Pressable>
-      </Animated.View>
+      </View>
     );
   }
 
@@ -1244,37 +1464,6 @@ export default function NotesScreen() {
     );
   }
 
-  function renderDragOverlay() {
-    if (!dragOverlay) {
-      return null;
-    }
-
-    const overlayWidth = Math.min(Math.max(width * 0.42, 150), 280);
-    const left = Math.min(Math.max(dragOverlay.x - overlayWidth / 2, 8), width - overlayWidth - 8);
-    const top = Math.max(dragOverlay.y - 44, insets.top + 8);
-
-    return (
-      <View
-        pointerEvents="none"
-        style={[
-          styles.dragOverlay,
-          {
-            left,
-            top,
-            width: overlayWidth,
-          },
-        ]}>
-        <Text numberOfLines={2} style={styles.noteListTitle}>
-          {dragOverlay.note.title}
-        </Text>
-        <Text numberOfLines={2} style={styles.noteListPreview}>
-          {getPreview(dragOverlay.note.body)}
-        </Text>
-        <Text style={styles.noteListDate}>{formatUpdatedAt(dragOverlay.note.updatedAt)}</Text>
-      </View>
-    );
-  }
-
   function renderEditor() {
     if (isNotebookOverviewOpen && selectedNotebook) {
       return renderNotebookOverview();
@@ -1370,7 +1559,7 @@ export default function NotesScreen() {
 
         <View pointerEvents="none" style={styles.bindingShadow} />
 
-        {selectedNote ? (
+        {selectedNote && !isEditorOpen ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Delete ${selectedNote.title}`}
@@ -1383,7 +1572,8 @@ export default function NotesScreen() {
     );
   }
 
-  return (
+  const useLegacyNotesLayout = false;
+  return useLegacyNotesLayout ? (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
@@ -1466,10 +1656,6 @@ export default function NotesScreen() {
                 </View>
               </View>
 
-              <Text style={styles.dragHint}>
-                {draggingNoteId ? 'Drop on note/notebook' : 'Hold + drag to group'}
-              </Text>
-
               <ScrollView
                 nestedScrollEnabled
                 directionalLockEnabled
@@ -1533,8 +1719,30 @@ export default function NotesScreen() {
         </View>
       </View>
 
-      {renderDragOverlay()}
     </KeyboardAvoidingView>
+  ) : (
+    <NotesPresentation
+      isEditorOpen={isEditorOpen}
+      isNotebookOverviewOpen={isNotebookOverviewOpen}
+      isKeyboardVisible={isKeyboardVisible}
+      isDirty={isDirty}
+      notes={notes}
+      notebookGroups={notebookGroups}
+      selectedNote={selectedNote}
+      selectedNotebook={selectedNotebook}
+      quickCaptureBody={quickCaptureBody}
+      saveStatusMessage={saveStatusMessage}
+      onQuickCaptureChange={setQuickCaptureDraft}
+      onQuickCaptureSave={saveQuickCapture}
+      onOpenBlankNote={openBlankNote}
+      onLeaveNotes={goHome}
+      onBackToNotes={goBackToNotes}
+      onSaveCurrentNote={saveCurrentNote}
+      onDeleteSelectedNote={confirmDeleteNote}
+      renderEditor={renderEditor}
+      renderNote={renderNoteListItem}
+      renderNotebook={renderNotebookListItem}
+    />
   );
 }
 
@@ -1542,6 +1750,244 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  screenRoot: {
+    flex: 1,
+    position: 'relative',
+    overflow: 'visible',
+  },
+  notesPage: {
+    flex: 1,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 434,
+    paddingHorizontal: 9,
+  },
+  notesHeader: {
+    minHeight: 82,
+    gap: 6,
+    marginBottom: 8,
+  },
+  notesHeaderTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  notesWordmark: {
+    width: 88,
+    height: 34,
+    flexShrink: 0,
+  },
+  notesHeaderCopy: {
+    minWidth: 0,
+    gap: 2,
+  },
+  notesEyebrow: {
+    color: COLORS.noteDeep,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1.4,
+  },
+  notesTitle: {
+    color: COLORS.ink,
+    fontSize: 18,
+    lineHeight: 23,
+    fontWeight: '900',
+    flexShrink: 1,
+  },
+  landingScroll: {
+    flex: 1,
+  },
+  landingScrollContent: {
+    gap: SPACING.md,
+    paddingBottom: SPACING.lg,
+  },
+  quickCaptureCard: {
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    backgroundColor: COLORS.notePaper,
+    borderColor: COLORS.noteCrayon,
+    borderWidth: 1,
+    ...SHADOWS.card,
+  },
+  sectionEyebrow: {
+    color: COLORS.noteDeep,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  quickCaptureInput: {
+    minHeight: 96,
+    marginTop: 8,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 10,
+    backgroundColor: COLORS.panel,
+    borderColor: COLORS.noteLine,
+    borderWidth: 1,
+    color: COLORS.ink,
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  quickCaptureFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginTop: 10,
+  },
+  quickCaptureHint: {
+    flex: 1,
+    minWidth: 0,
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sectionHeadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  sectionHeadingCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  sectionSupportingText: {
+    color: COLORS.muted,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  newFullNoteButton: {
+    minHeight: 36,
+    flexShrink: 0,
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.noteSoft,
+    borderColor: COLORS.noteCrayon,
+    borderWidth: 1,
+  },
+  newFullNoteButtonText: {
+    color: COLORS.noteDeep,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  recentNotesList: {
+    gap: SPACING.sm,
+  },
+  notebookShortcuts: {
+    gap: SPACING.sm,
+  },
+  focusedHeader: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  notesBackButton: {
+    minHeight: 40,
+    minWidth: 76,
+    flexShrink: 0,
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.panel,
+    borderColor: COLORS.line,
+    borderWidth: 1,
+  },
+  notesBackButtonText: {
+    color: COLORS.ink,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  focusedHeaderTitle: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  focusedEyebrow: {
+    color: COLORS.noteDeep,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  focusedTitle: {
+    color: COLORS.ink,
+    fontSize: 17,
+    lineHeight: 21,
+    fontWeight: '900',
+    flexShrink: 1,
+  },
+  focusedHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flexShrink: 0,
+  },
+  primaryActionButton: {
+    position: 'relative',
+    overflow: 'hidden',
+    minHeight: 40,
+    minWidth: 92,
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.reviewPaper,
+    borderColor: COLORS.reviewCrayon,
+    borderWidth: 1,
+    ...SHADOWS.soft,
+  },
+  primaryActionButtonDisabled: {
+    backgroundColor: COLORS.disabled,
+    borderColor: COLORS.line,
+  },
+  primaryActionButtonText: {
+    color: COLORS.noteDeep,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  primaryActionButtonTextDisabled: {
+    color: COLORS.muted,
+  },
+  deleteHeaderButton: {
+    minHeight: 40,
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.dangerSoft,
+    borderColor: COLORS.dangerCrayon,
+    borderWidth: 1,
+  },
+  deleteHeaderButtonText: {
+    color: COLORS.danger,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  focusedEditorFrame: {
+    flex: 1,
+    minHeight: 320,
+    maxWidth: 420,
+    width: '100%',
+    alignSelf: 'center',
+    marginBottom: 8,
+    padding: 8,
+    borderRadius: RADIUS.xl,
+    backgroundColor: COLORS.notePaper,
+    borderColor: COLORS.noteCrayon,
+    borderWidth: 1,
+    ...SHADOWS.card,
   },
   content: {
     flex: 1,
@@ -1682,12 +2128,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     includeFontPadding: false,
   },
-  dragHint: {
-    color: COLORS.muted,
-    fontSize: 10,
-    fontWeight: '800',
-    lineHeight: 13,
-  },
   newNoteButton: {
     minHeight: 34,
     borderRadius: RADIUS.pill,
@@ -1798,11 +2238,6 @@ const styles = StyleSheet.create({
     borderColor: COLORS.noteDeep,
     borderWidth: 2,
   },
-  notebookListItemDropTarget: {
-    backgroundColor: COLORS.notePaper,
-    borderColor: COLORS.noteDeep,
-    borderWidth: 2,
-  },
   notebookPressArea: {
     flex: 1,
     flexDirection: 'row',
@@ -1850,24 +2285,145 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.noteSoft,
     borderColor: COLORS.noteCrayon,
   },
-  noteListItemDropTarget: {
-    backgroundColor: COLORS.notePaper,
-    borderColor: COLORS.noteDeep,
-    borderWidth: 2,
-  },
-  noteListItemDragging: {
-    backgroundColor: COLORS.white,
-    borderColor: COLORS.noteDeep,
-    borderWidth: 2,
-    ...SHADOWS.card,
-  },
   notePressArea: {
-    flex: 1,
+    minHeight: 58,
     paddingLeft: 10,
     paddingRight: 27,
     paddingTop: 9,
     paddingBottom: 9,
     gap: 4,
+  },
+  notebookAssignmentButton: {
+    alignSelf: 'flex-start',
+    minHeight: 32,
+    maxWidth: '100%',
+    marginLeft: 10,
+    marginRight: 27,
+    marginBottom: 9,
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: 9,
+    justifyContent: 'center',
+    backgroundColor: COLORS.noteSoft,
+    borderColor: COLORS.noteCrayon,
+    borderWidth: 1,
+  },
+  notebookAssignmentButtonText: {
+    maxWidth: '100%',
+    color: COLORS.noteDeep,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  notebookPicker: {
+    marginHorizontal: 10,
+    marginBottom: 10,
+    padding: 8,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.notePaper,
+    borderColor: COLORS.noteCrayon,
+    borderWidth: 1,
+    gap: 6,
+  },
+  notebookPickerTitle: {
+    color: COLORS.noteDeep,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  notebookPickerOption: {
+    minHeight: 46,
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    backgroundColor: COLORS.panel,
+    borderColor: COLORS.line,
+    borderWidth: 1,
+  },
+  notebookPickerOptionCurrent: {
+    backgroundColor: COLORS.noteSoft,
+    borderColor: COLORS.noteDeep,
+  },
+  notebookPickerOptionName: {
+    flex: 1,
+    minWidth: 0,
+    color: COLORS.ink,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  notebookPickerOptionMeta: {
+    color: COLORS.noteDeep,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  notebookPickerRemove: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  notebookPickerRemoveText: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  newNotebookButton: {
+    minHeight: 44,
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+    backgroundColor: COLORS.noteSoft,
+    borderColor: COLORS.noteCrayon,
+    borderWidth: 1,
+  },
+  newNotebookButtonText: {
+    color: COLORS.noteDeep,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  notebookCreateForm: {
+    gap: 6,
+    paddingTop: 2,
+  },
+  notebookCreateInput: {
+    minHeight: 42,
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: 10,
+    backgroundColor: COLORS.panel,
+    borderColor: COLORS.line,
+    borderWidth: 1,
+    color: COLORS.ink,
+    fontSize: 14,
+  },
+  notebookCreateActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 6,
+  },
+  notebookCreateCancel: {
+    minHeight: 40,
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+  },
+  notebookCreateCancelText: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  notebookCreateSubmit: {
+    minHeight: 40,
+    paddingHorizontal: 12,
+    borderRadius: RADIUS.sm,
+    justifyContent: 'center',
+    backgroundColor: COLORS.noteSoft,
+    borderColor: COLORS.noteDeep,
+    borderWidth: 1,
+  },
+  notebookCreateSubmitText: {
+    color: COLORS.noteDeep,
+    fontSize: 11,
+    fontWeight: '900',
   },
   noteListTitle: {
     color: COLORS.ink,
@@ -2045,7 +2601,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.line,
     borderWidth: 1,
   },
-  notebookNoteDragArea: {
+  notebookNotePressArea: {
     flex: 1,
     padding: 12,
     paddingRight: 34,
@@ -2127,23 +2683,6 @@ const styles = StyleSheet.create({
   },
   editorInputUnarmed: {
     color: COLORS.ink,
-  },
-  dragOverlay: {
-    position: 'absolute',
-    zIndex: 999,
-    elevation: 20,
-    minHeight: 80,
-    borderRadius: RADIUS.md,
-    opacity: 0.98,
-    paddingLeft: 10,
-    paddingRight: 14,
-    paddingTop: 9,
-    paddingBottom: 9,
-    gap: 4,
-    backgroundColor: COLORS.white,
-    borderColor: COLORS.noteDeep,
-    borderWidth: 2,
-    ...SHADOWS.card,
   },
   pressed: {
     opacity: 0.9,
