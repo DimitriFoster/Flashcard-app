@@ -48,6 +48,7 @@ app-example
 CLAUDE.md
 .agents/
 .codex/
+/.codex-remote-attachments/
 .vscode/
 /AGENTS.md
 /PROJECT_LOG.md
@@ -56,9 +57,9 @@ CLAUDE.md
 /tools/
 /scripts/
 /src/components/folio/
+/src/components/notes/notes-hub-illustrations.tsx
 /src/folio-browse/
 /src/folio-review/FolioReviewScreen.tsx
-/src/folio-review/types.ts
 /src/folio-review/index.ts
 /src/components/review/preview-panel.tsx
 /src/app/maestro-seed.tsx

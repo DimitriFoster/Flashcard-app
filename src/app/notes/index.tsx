@@ -14,6 +14,7 @@ import {
   ImageBackground,
   Keyboard,
   KeyboardAvoidingView,
+  PixelRatio,
   Platform,
   Pressable,
   ScrollView,
@@ -26,24 +27,34 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HomePanelFill } from '@/components/home/home-panel-fill';
+import { NotesLanding, type NotesLandingView } from '@/components/notes/notes-landing';
+import { RuledNotebookPaper } from '@/components/notes/ruled-notebook-paper';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/design';
 import { folioReviewAssets } from '@/folio-review/folioReviewAssets';
+import { FOLIO_HAND_FONT } from '@/folio-review/folioFonts';
+import { FIRST_SHELF } from '@/lib/notebook-shelves';
 import {
   deleteNotebook as deleteStoredNotebook,
   deleteNote as deleteStoredNote,
   createNotebook,
+  createNotebookShelf,
+  deleteNotebookShelf,
   getNotebooks,
+  getNotebookShelves,
   getNotes,
+  moveNotebookToShelf,
   moveNoteOutOfNotebook,
   moveNoteToNotebook,
+  renameNotebookShelf,
   renameNotebook,
   saveNote,
 } from '@/storage/notes';
-import type { Notebook, StudyNote } from '@/types/note';
+import type { Notebook, NotebookShelf, StudyNote } from '@/types/note';
 
 const notesPanelSwatch = require('../../../assets/folio-ui/home-page/swatches/home_notes_panel_swatch.png');
 
 const NOTEBOOK_LINE_HEIGHT = 28;
+const NOTEBOOK_FONT_SIZE = 17;
 const NOTEBOOK_TEXT_TOP_PADDING = 47;
 
 type SortDirection = 'newest' | 'oldest';
@@ -299,8 +310,11 @@ type NotesPresentationProps = {
   isNotebookOverviewOpen: boolean;
   isKeyboardVisible: boolean;
   isDirty: boolean;
-  notes: StudyNote[];
+  landingView: NotesLandingView;
+  looseNotes: StudyNote[];
   notebookGroups: { notebook: Notebook; notes: StudyNote[] }[];
+  shelves: NotebookShelf[];
+  newNotebookShelfId?: string;
   selectedNote?: StudyNote;
   selectedNotebook?: Notebook;
   quickCaptureBody: string;
@@ -308,13 +322,22 @@ type NotesPresentationProps = {
   onQuickCaptureChange: (value: string) => void;
   onQuickCaptureSave: () => void;
   onOpenBlankNote: () => void;
+  onOpenNewNotebook: (shelfId?: string) => void;
+  onOpenLooseNotes: () => void;
+  onOpenNotebooks: () => void;
+  onBackToHub: () => void;
+  onCreateNotebook: (name: string, shelfId: string) => boolean;
+  onAddShelf: (name: string) => boolean;
+  onRenameShelf: (shelfId: string, name: string) => boolean;
+  onDeleteShelf: (shelfId: string) => boolean;
+  onMoveNotebook: (notebookId: string, shelfId: string) => boolean;
+  onOpenNotebook: (notebook: Notebook) => void;
   onLeaveNotes: () => void;
   onBackToNotes: () => void;
   onSaveCurrentNote: () => void;
   onDeleteSelectedNote: (note: StudyNote) => void;
   renderEditor: () => React.ReactNode;
   renderNote: (note: StudyNote) => React.ReactNode;
-  renderNotebook: (group: { notebook: Notebook; notes: StudyNote[] }) => React.ReactNode;
 };
 
 function NotesPresentation({
@@ -322,27 +345,57 @@ function NotesPresentation({
   isEditorOpen,
   isKeyboardVisible,
   isNotebookOverviewOpen,
+  landingView,
+  looseNotes,
   notebookGroups,
-  notes,
+  shelves,
+  newNotebookShelfId,
   onBackToNotes,
+  onBackToHub,
+  onCreateNotebook,
+  onAddShelf,
+  onRenameShelf,
+  onDeleteShelf,
+  onMoveNotebook,
+  onOpenNotebook,
   onDeleteSelectedNote,
   onLeaveNotes,
   onOpenBlankNote,
+  onOpenLooseNotes,
+  onOpenNewNotebook,
+  onOpenNotebooks,
   onQuickCaptureChange,
   onQuickCaptureSave,
   onSaveCurrentNote,
   quickCaptureBody,
   renderEditor,
-  renderNotebook,
   renderNote,
   saveStatusMessage,
   selectedNote,
   selectedNotebook,
 }: NotesPresentationProps) {
   const insets = useSafeAreaInsets();
+  const landingScrollRef = useRef<ScrollView>(null);
+  const isHub = landingView === 'hub';
+  const landingTitle = isHub
+    ? 'Thoughts worth keeping.'
+    : landingView === 'loose'
+      ? 'Loose notes'
+      : 'Your notebooks';
+  const landingSection = landingView === 'new-notebook' ? 'notebooks' : landingView;
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      landingScrollRef.current?.scrollTo({ y: 0, animated: false });
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.scrollTo(0, 0);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [landingSection]);
 
   return (
-    <ImageBackground source={folioReviewAssets.background.pagePaper} resizeMode="cover" style={styles.screen}>
+    <ImageBackground source={folioReviewAssets.background.pagePaper} resizeMode="cover" imageStyle={styles.pagePaperImage} style={[styles.screen, styles.pageBackground]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
@@ -417,16 +470,16 @@ function NotesPresentation({
                 <View style={styles.notesHeaderTop}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Back home"
-                    onPress={onLeaveNotes}
+                    accessibilityLabel={isHub ? 'Back home' : 'Back to Notes'}
+                    onPress={isHub ? onLeaveNotes : onBackToHub}
                     style={({ pressed }) => [styles.homeButton, pressed && styles.pressed]}>
-                    <Text style={styles.homeButtonText}>Back home</Text>
+                    <Text style={styles.homeButtonText}>{isHub ? 'Back home' : '< Notes'}</Text>
                   </Pressable>
                   <Image source={folioReviewAssets.header.folioWordmark} resizeMode="contain" style={styles.notesWordmark} />
                 </View>
                 <View style={styles.notesHeaderCopy}>
                   <Text style={styles.notesEyebrow}>NOTES</Text>
-                  <Text style={styles.notesTitle}>Thoughts worth keeping.</Text>
+                  <Text style={styles.notesTitle}>{landingTitle}</Text>
                 </View>
               </View>
 
@@ -437,73 +490,33 @@ function NotesPresentation({
               ) : null}
 
               <ScrollView
+                key={landingSection}
+                ref={landingScrollRef}
                 keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={notes.length > 5}
+                showsVerticalScrollIndicator={!isHub}
                 style={styles.landingScroll}
                 contentContainerStyle={styles.landingScrollContent}>
-                <View style={styles.quickCaptureCard}>
-                  <Text style={styles.sectionEyebrow}>QUICK NOTE</Text>
-                  <TextInput
-                    accessibilityLabel="Quick note capture"
-                    multiline
-                    onChangeText={onQuickCaptureChange}
-                    placeholder="Jot something down..."
-                    placeholderTextColor={COLORS.muted}
-                    style={styles.quickCaptureInput}
-                    textAlignVertical="top"
-                    testID="notes-quick-capture"
-                    value={quickCaptureBody}
-                  />
-                  <View style={styles.quickCaptureFooter}>
-                    <Text style={styles.quickCaptureHint}>A small thought is enough.</Text>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Save quick note"
-                      accessibilityState={{ disabled: !quickCaptureBody.trim() }}
-                      disabled={!quickCaptureBody.trim()}
-                      onPress={onQuickCaptureSave}
-                      style={({ pressed }) => [
-                        styles.primaryActionButton,
-                        !quickCaptureBody.trim() && styles.primaryActionButtonDisabled,
-                        pressed && styles.pressed,
-                      ]}
-                      testID="notes-quick-save">
-                      {quickCaptureBody.trim() ? <HomePanelFill source={notesPanelSwatch} opacity={1} /> : null}
-                      <Text style={[styles.primaryActionButtonText, !quickCaptureBody.trim() && styles.primaryActionButtonTextDisabled]}>Save note</Text>
-                    </Pressable>
-                  </View>
-                </View>
-
-                <View style={styles.sectionHeadingRow}>
-                  <View style={styles.sectionHeadingCopy}>
-                    <Text style={styles.sectionEyebrow}>RECENT NOTES</Text>
-                    <Text style={styles.sectionSupportingText}>{notes.length ? 'The thoughts you chose to keep.' : 'Your saved thoughts will live here.'}</Text>
-                  </View>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Create a new full note"
-                    onPress={onOpenBlankNote}
-                    style={({ pressed }) => [styles.newFullNoteButton, pressed && styles.pressed]}>
-                    <Text style={styles.newFullNoteButtonText}>+ New full note</Text>
-                  </Pressable>
-                </View>
-
-                <View style={styles.recentNotesList}>
-                  {notes.map(renderNote)}
-                  {notes.length === 0 ? (
-                    <View style={styles.emptyNotesState}>
-                      <Text style={styles.emptyNotesText}>No saved notes yet. Start with a quick thought above.</Text>
-                    </View>
-                  ) : null}
-                </View>
-
-                {notebookGroups.length > 0 ? (
-                  <View style={styles.notebookShortcuts}>
-                    <Text style={styles.sectionEyebrow}>NOTEBOOKS</Text>
-                    {notebookGroups.map(renderNotebook)}
-                  </View>
-                ) : null}
-
+                <NotesLanding
+                  view={landingView}
+                  looseNotes={looseNotes}
+                  notebookGroups={notebookGroups}
+                  shelves={shelves}
+                  newNotebookShelfId={newNotebookShelfId}
+                  quickCaptureBody={quickCaptureBody}
+                  onQuickCaptureChange={onQuickCaptureChange}
+                  onQuickCaptureSave={onQuickCaptureSave}
+                  onNewNote={onOpenBlankNote}
+                  onNewNotebook={onOpenNewNotebook}
+                  onOpenLooseNotes={onOpenLooseNotes}
+                  onOpenNotebooks={onOpenNotebooks}
+                  onCreateNotebook={onCreateNotebook}
+                  onAddShelf={onAddShelf}
+                  onRenameShelf={onRenameShelf}
+                  onDeleteShelf={onDeleteShelf}
+                  onMoveNotebook={onMoveNotebook}
+                  onOpenNotebook={onOpenNotebook}
+                  renderNote={renderNote}
+                />
               </ScrollView>
             </>
           )}
@@ -518,15 +531,18 @@ function NotesPresentation({
 export default function NotesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, fontScale } = useWindowDimensions();
 
   const [notes, setNotes] = useState<StudyNote[]>([]);
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
+  const [shelves, setShelves] = useState<NotebookShelf[]>([FIRST_SHELF]);
+  const [newNotebookShelfId, setNewNotebookShelfId] = useState<string | undefined>();
   const [notebookNameDrafts, setNotebookNameDrafts] = useState<Record<string, string>>({});
   const [selectedNoteId, setSelectedNoteId] = useState<string | undefined>();
   const [selectedNotebookId, setSelectedNotebookId] = useState<string | undefined>();
   const [isNotebookOverviewOpen, setIsNotebookOverviewOpen] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [landingView, setLandingView] = useState<NotesLandingView>('hub');
   const [quickCaptureBody, setQuickCaptureBody] = useState('');
   const [body, setBody] = useState('');
   const [openNotebookPickerNoteId, setOpenNotebookPickerNoteId] = useState<string | null>(null);
@@ -545,8 +561,8 @@ export default function NotesScreen() {
   const editorScrollRef = useRef<ScrollView | null>(null);
   const bodyRef = useRef('');
   const quickCaptureBodyRef = useRef('');
-  const selectedNoteIdRef = useRef<string | undefined>();
-  const selectedNotebookIdRef = useRef<string | undefined>();
+  const selectedNoteIdRef = useRef<string | undefined>(undefined);
+  const selectedNotebookIdRef = useRef<string | undefined>(undefined);
   const saveStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emptyNoteWarningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -572,8 +588,7 @@ export default function NotesScreen() {
         .map((notebook) => ({
           notebook,
           notes: notes.filter((note) => note.notebookId === notebook.id),
-        }))
-        .filter((group) => group.notes.length > 0),
+        })),
     [notebooks, notes]
   );
 
@@ -626,20 +641,22 @@ export default function NotesScreen() {
     ? Math.min(Math.max(keyboardHeight * 0.72, 128), 280)
     : 0;
   const editorBottomPadding = 38;
+  const editorLineHeight = PixelRatio.roundToNearestPixel(NOTEBOOK_LINE_HEIGHT * fontScale);
+  const editorFontSize = PixelRatio.roundToNearestPixel(NOTEBOOK_FONT_SIZE * fontScale);
 
   function normalizeEditorContentHeight(value: number) {
-    const safeValue = Number.isFinite(value) ? Math.max(value, NOTEBOOK_LINE_HEIGHT) : NOTEBOOK_LINE_HEIGHT;
-    return Math.ceil(safeValue / NOTEBOOK_LINE_HEIGHT) * NOTEBOOK_LINE_HEIGHT;
+    const safeValue = Number.isFinite(value) ? Math.max(value, editorLineHeight) : editorLineHeight;
+    return Math.ceil(safeValue / editorLineHeight) * editorLineHeight;
   }
 
   const editorScrollContentHeight = Math.max(
     editorViewportHeight,
     editorContentHeight + editorBottomPadding + keyboardScrollPadding
   );
-  const editorSurfaceHeight = Math.ceil(editorScrollContentHeight / NOTEBOOK_LINE_HEIGHT) * NOTEBOOK_LINE_HEIGHT;
+  const editorSurfaceHeight = Math.ceil(editorScrollContentHeight / editorLineHeight) * editorLineHeight;
   const shouldScrollEditor =
     editorViewportHeight > 0 &&
-    editorScrollContentHeight > editorViewportHeight + NOTEBOOK_LINE_HEIGHT;
+    editorScrollContentHeight > editorViewportHeight + editorLineHeight;
   const shouldAllowEditorScroll = true;
 
   useEffect(() => {
@@ -690,7 +707,7 @@ export default function NotesScreen() {
     const hideSubscription = Keyboard.addListener(hideEvent, () => {
       setIsKeyboardVisible(false);
       setKeyboardHeight(0);
-      editorScrollRef.current?.scrollTo({ y: Math.max(editorScrollY.__getValue?.() ?? 0, 0), animated: false });
+      editorScrollRef.current?.scrollTo({ y: Math.max(editorScrollOffsetRef.current, 0), animated: false });
     });
 
     return () => {
@@ -719,14 +736,17 @@ export default function NotesScreen() {
   function refreshNotesState() {
     const nextNotes = getNotes();
     const nextNotebooks = getNotebooks();
+    const nextShelves = getNotebookShelves();
 
     setNotes(nextNotes);
     setNotebooks(nextNotebooks);
+    setShelves(nextShelves);
     setNotebookNameDrafts(createNotebookDrafts(nextNotebooks));
 
     return {
       notes: nextNotes,
       notebooks: nextNotebooks,
+      shelves: nextShelves,
     };
   }
 
@@ -808,6 +828,58 @@ export default function NotesScreen() {
     if (!applyNotebookResult(moved)) {
       showSaveStatus('Could not add note to notebook');
     }
+  }
+
+  function createNotebookFromLanding(name: string, shelfId: string) {
+    const notebook = createNotebook(name, shelfId);
+
+    if (!notebook) {
+      return false;
+    }
+
+    refreshNotesState();
+    setNewNotebookShelfId(undefined);
+    setLandingView('notebooks');
+    openNotebook(notebook);
+    return true;
+  }
+
+  function addShelfFromLanding(name: string) {
+    const shelf = createNotebookShelf(name);
+    if (!shelf) {
+      return false;
+    }
+    setShelves(getNotebookShelves());
+    return true;
+  }
+
+  function renameShelfFromLanding(shelfId: string, name: string) {
+    if (!renameNotebookShelf(shelfId, name)) {
+      return false;
+    }
+    setShelves(getNotebookShelves());
+    return true;
+  }
+
+  function deleteShelfFromLanding(shelfId: string) {
+    const result = deleteNotebookShelf(shelfId);
+    if (!result) {
+      return false;
+    }
+    setShelves(result.shelves);
+    setNotebooks(result.notebooks);
+    if (newNotebookShelfId === shelfId) {
+      setNewNotebookShelfId(undefined);
+    }
+    return true;
+  }
+
+  function moveNotebookFromLanding(notebookId: string, shelfId: string) {
+    if (!moveNotebookToShelf(notebookId, shelfId)) {
+      return false;
+    }
+    refreshNotesState();
+    return true;
   }
 
   function setDraftBody(value: string) {
@@ -1030,6 +1102,7 @@ export default function NotesScreen() {
     setIsEditorOpen(true);
     setIsEditorArmed(false);
     editorScrollY.setValue(0);
+    editorScrollOffsetRef.current = 0;
     setEditorContentHeight(0);
     setDraftBody('');
   }
@@ -1038,12 +1111,13 @@ export default function NotesScreen() {
     closeNotebookPicker();
 
     const currentNoteId = selectedNoteIdRef.current ?? selectedNoteId;
+    const isNoteEditorOpen = isEditorOpen && !isNotebookOverviewOpen;
 
-    if (note.id === currentNoteId) {
+    if (isNoteEditorOpen && note.id === currentNoteId) {
       return;
     }
 
-    if (shouldPersistCurrentDraft()) {
+    if (isNoteEditorOpen && shouldPersistCurrentDraft()) {
       persistCurrentDraft();
     }
 
@@ -1086,17 +1160,17 @@ export default function NotesScreen() {
     const estimatedCharsPerLine = Math.max(18, Math.floor(estimatedTextWidth / 9));
     const estimatedSoftWrapRows = Math.floor(currentLineText.length / estimatedCharsPerLine);
     const estimatedCaretLine = explicitLineIndex + estimatedSoftWrapRows;
-    const caretY = NOTEBOOK_TEXT_TOP_PADDING + (estimatedCaretLine + 1) * NOTEBOOK_LINE_HEIGHT;
+    const caretY = NOTEBOOK_TEXT_TOP_PADDING + (estimatedCaretLine + 1) * editorLineHeight;
     const visibleTop = editorScrollOffsetRef.current;
     const safeVisibleBottom =
-      visibleTop + editorViewportHeight - keyboardScrollPadding - NOTEBOOK_LINE_HEIGHT * 2;
+      visibleTop + editorViewportHeight - keyboardScrollPadding - editorLineHeight * 2;
 
     if (caretY <= safeVisibleBottom) {
       return;
     }
 
     const targetY =
-      caretY - (editorViewportHeight - keyboardScrollPadding - NOTEBOOK_LINE_HEIGHT * 3);
+      caretY - (editorViewportHeight - keyboardScrollPadding - editorLineHeight * 3);
     const maxY = Math.max(0, editorSurfaceHeight - editorViewportHeight);
     const nextY = Math.min(Math.max(targetY, 0), maxY);
 
@@ -1502,11 +1576,38 @@ export default function NotesScreen() {
                   height: editorSurfaceHeight,
                 },
               ]}>
+              <RuledNotebookPaper
+                height={editorSurfaceHeight}
+                lineHeight={editorLineHeight}
+                textTop={NOTEBOOK_TEXT_TOP_PADDING}
+              />
+              {Platform.OS === 'web' ? (
+                <Text
+                  accessible={false}
+                  aria-hidden
+                  importantForAccessibility="no-hide-descendants"
+                  pointerEvents="none"
+                  onLayout={(event) => {
+                    const nextHeight = normalizeEditorContentHeight(
+                      NOTEBOOK_TEXT_TOP_PADDING + event.nativeEvent.layout.height
+                    );
+                    setEditorContentHeight((currentHeight) =>
+                      currentHeight === nextHeight ? currentHeight : nextHeight
+                    );
+                  }}
+                  style={[
+                    styles.editorTextMeasure,
+                    { fontSize: editorFontSize, lineHeight: editorLineHeight },
+                  ]}>
+                  {body || ' '}
+                </Text>
+              ) : null}
               <TextInput
                 ref={editorInputRef}
+                allowFontScaling={false}
                 multiline
                 scrollEnabled={false}
-                onContentSizeChange={(event) => {
+                onContentSizeChange={Platform.OS === 'web' ? undefined : (event) => {
                   const nextHeight = normalizeEditorContentHeight(event.nativeEvent.contentSize.height);
                   setEditorContentHeight((currentHeight) =>
                     currentHeight === nextHeight ? currentHeight : nextHeight
@@ -1547,6 +1648,8 @@ export default function NotesScreen() {
                   {
                     minHeight: editorViewportHeight,
                     height: editorSurfaceHeight,
+                    fontSize: editorFontSize,
+                    lineHeight: editorLineHeight,
                     paddingBottom: editorBottomPadding,
                   },
                   !isEditorArmed && styles.editorInputUnarmed,
@@ -1726,8 +1829,11 @@ export default function NotesScreen() {
       isNotebookOverviewOpen={isNotebookOverviewOpen}
       isKeyboardVisible={isKeyboardVisible}
       isDirty={isDirty}
-      notes={notes}
+      landingView={landingView}
+      looseNotes={looseNotes}
       notebookGroups={notebookGroups}
+      shelves={shelves}
+      newNotebookShelfId={newNotebookShelfId}
       selectedNote={selectedNote}
       selectedNotebook={selectedNotebook}
       quickCaptureBody={quickCaptureBody}
@@ -1735,18 +1841,40 @@ export default function NotesScreen() {
       onQuickCaptureChange={setQuickCaptureDraft}
       onQuickCaptureSave={saveQuickCapture}
       onOpenBlankNote={openBlankNote}
+      onOpenNewNotebook={(shelfId) => {
+        setNewNotebookShelfId(shelfId);
+        setLandingView('new-notebook');
+      }}
+      onOpenLooseNotes={() => setLandingView('loose')}
+      onOpenNotebooks={() => {
+        setNewNotebookShelfId(undefined);
+        setLandingView('notebooks');
+      }}
+      onBackToHub={() => setLandingView('hub')}
+      onCreateNotebook={createNotebookFromLanding}
+      onAddShelf={addShelfFromLanding}
+      onRenameShelf={renameShelfFromLanding}
+      onDeleteShelf={deleteShelfFromLanding}
+      onMoveNotebook={moveNotebookFromLanding}
+      onOpenNotebook={openNotebook}
       onLeaveNotes={goHome}
       onBackToNotes={goBackToNotes}
       onSaveCurrentNote={saveCurrentNote}
       onDeleteSelectedNote={confirmDeleteNote}
       renderEditor={renderEditor}
       renderNote={renderNoteListItem}
-      renderNotebook={renderNotebookListItem}
     />
   );
 }
 
 const styles = StyleSheet.create({
+  pageBackground: {
+    overflow: 'hidden',
+  },
+  pagePaperImage: {
+    width: '100%',
+    height: '100%',
+  },
   screen: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -1791,15 +1919,16 @@ const styles = StyleSheet.create({
   },
   notesTitle: {
     color: COLORS.ink,
-    fontSize: 18,
-    lineHeight: 23,
-    fontWeight: '900',
+    fontFamily: FOLIO_HAND_FONT,
+    fontSize: 21,
+    lineHeight: 29,
     flexShrink: 1,
   },
   landingScroll: {
     flex: 1,
   },
   landingScrollContent: {
+    flexGrow: 1,
     gap: SPACING.md,
     paddingBottom: SPACING.lg,
   },
@@ -2673,13 +2802,20 @@ const styles = StyleSheet.create({
     flex: 1,
     color: COLORS.ink,
     backgroundColor: 'transparent',
+    padding: 0,
     paddingTop: NOTEBOOK_TEXT_TOP_PADDING,
     paddingLeft: 24,
     paddingRight: 24,
-    fontSize: 17,
-    lineHeight: NOTEBOOK_LINE_HEIGHT,
     fontWeight: '500',
     includeFontPadding: false,
+  },
+  editorTextMeasure: {
+    position: 'absolute',
+    top: NOTEBOOK_TEXT_TOP_PADDING,
+    left: 24,
+    right: 24,
+    opacity: 0,
+    fontWeight: '500',
   },
   editorInputUnarmed: {
     color: COLORS.ink,

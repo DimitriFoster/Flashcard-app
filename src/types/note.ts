@@ -18,6 +18,13 @@ export type Notebook = {
   name: string;
   createdAt: string;
   updatedAt: string;
+  shelfId?: string;
+};
+
+export type NotebookShelf = {
+  id: string;
+  name: string;
+  createdAt: string;
 };
 
 export type SaveNoteInput = {

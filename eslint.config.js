@@ -12,7 +12,6 @@ module.exports = defineConfig([
       "src/components/folio/**",
       "src/folio-browse/**",
       "src/folio-review/FolioReviewScreen.tsx",
-      "src/folio-review/types.ts",
       "src/folio-review/index.ts",
       "src/components/review/preview-panel.tsx",
       "src/app/maestro-seed.tsx",

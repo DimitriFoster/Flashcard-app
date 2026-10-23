@@ -448,7 +448,6 @@ export function DeckReviewSession({
               ) : currentCard ? (
                 <View style={[styles.cardStackWrap, { height: browseStackHeight }]}> 
                   <Image
-                    pointerEvents="none"
                     source={folioReviewAssets.card.stackBackLayers}
                     resizeMode="stretch"
                     style={[styles.cardBackLayers, { height: browseStackHeight, width: browseStackWidth }]}
@@ -696,7 +695,6 @@ export function DeckReviewSession({
               ) : currentCard ? (
                 <View style={[styles.cardStackWrap, { height: stackHeight }]}> 
                   <Image
-                    pointerEvents="none"
                     source={folioReviewAssets.card.stackBackLayers}
                     resizeMode="stretch"
                     style={[styles.cardBackLayers, { height: stackHeight, width: stackWidth }]}
@@ -1194,6 +1192,7 @@ const styles = StyleSheet.create({
   cardBackLayers: {
     bottom: 0,
     opacity: 1,
+    pointerEvents: 'none',
     position: 'absolute',
   },
   animatedCard: {

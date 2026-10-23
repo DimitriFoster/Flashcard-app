@@ -7,12 +7,14 @@
  */
 import { Platform } from 'react-native';
 
-import type { Notebook, SaveNoteInput, StudyNote } from '@/types/note';
+import { FIRST_SHELF, FIRST_SHELF_ID, moveNotebooksFromShelf, renameShelfInList, restoreNotebookShelves } from '@/lib/notebook-shelves';
+import type { Notebook, NotebookShelf, SaveNoteInput, StudyNote } from '@/types/note';
 
 import { storage } from './mmkv';
 
 const NOTES_KEY = 'notes';
 const NOTEBOOKS_KEY = 'note-notebooks';
+const NOTEBOOK_SHELVES_KEY = 'note-notebook-shelves';
 
 function parseJsonArray<T>(value: string | undefined): T[] {
   if (!value) {
@@ -72,6 +74,7 @@ function normalizeNotebook(notebook: Partial<Notebook>): Notebook {
     name: notebook.name?.trim() || 'Notebook',
     createdAt: notebook.createdAt ?? now,
     updatedAt: notebook.updatedAt ?? now,
+    shelfId: notebook.shelfId,
   };
 }
 
@@ -81,6 +84,84 @@ function saveNotes(notes: StudyNote[]) {
 
 function saveNotebooks(notebooks: Notebook[]) {
   storage.set(NOTEBOOKS_KEY, JSON.stringify(notebooks));
+}
+
+function saveNotebookShelves(shelves: NotebookShelf[]) {
+  storage.set(NOTEBOOK_SHELVES_KEY, JSON.stringify(shelves));
+}
+
+export function getNotebookShelves(): NotebookShelf[] {
+  if (!canUseStorage()) {
+    return [FIRST_SHELF];
+  }
+
+  const stored = parseJsonArray<Partial<NotebookShelf>>(storage.getString(NOTEBOOK_SHELVES_KEY));
+  return restoreNotebookShelves(stored);
+}
+
+export function renameNotebookShelf(id: string, name: string) {
+  if (!canUseStorage()) {
+    return undefined;
+  }
+
+  const renamed = renameShelfInList(getNotebookShelves(), id, name);
+  if (!renamed) {
+    return undefined;
+  }
+
+  saveNotebookShelves(renamed);
+  return renamed.find((shelf) => shelf.id === id);
+}
+
+export function createNotebookShelf(name: string) {
+  if (!canUseStorage()) {
+    return undefined;
+  }
+
+  const shelves = getNotebookShelves();
+  const shelf: NotebookShelf = {
+    id: createId('shelf'),
+    name: name.trim() || `Shelf ${shelves.length + 1}`,
+    createdAt: new Date().toISOString(),
+  };
+  saveNotebookShelves([...shelves, shelf]);
+  return shelf;
+}
+
+export function deleteNotebookShelf(id: string) {
+  if (!canUseStorage() || id === FIRST_SHELF_ID) {
+    return undefined;
+  }
+
+  const shelves = getNotebookShelves();
+  if (!shelves.some((shelf) => shelf.id === id)) {
+    return undefined;
+  }
+
+  const notebooks = moveNotebooksFromShelf(getNotebooks(), id);
+  const remainingShelves = shelves.filter((shelf) => shelf.id !== id);
+  saveNotebooks(notebooks);
+  saveNotebookShelves(remainingShelves);
+  return { notebooks, shelves: remainingShelves };
+}
+
+export function moveNotebookToShelf(notebookId: string, shelfId: string) {
+  if (!canUseStorage() || !getNotebookShelves().some((shelf) => shelf.id === shelfId)) {
+    return undefined;
+  }
+
+  let movedNotebook: Notebook | undefined;
+  const notebooks = getNotebooks().map((notebook) => {
+    if (notebook.id !== notebookId) {
+      return notebook;
+    }
+    movedNotebook = { ...notebook, shelfId: shelfId === FIRST_SHELF_ID ? undefined : shelfId };
+    return movedNotebook;
+  });
+  if (movedNotebook) {
+    saveNotebooks(notebooks);
+  }
+  return movedNotebook;
 }
 
 export function getNotes() {
@@ -355,8 +436,12 @@ export function moveNoteToNotebook(noteId: string, notebookId: string) {
   };
 }
 
-export function createNotebook(name: string) {
+export function createNotebook(name: string, shelfId = FIRST_SHELF_ID) {
   if (!canUseStorage()) {
+    return undefined;
+  }
+
+  if (!getNotebookShelves().some((shelf) => shelf.id === shelfId)) {
     return undefined;
   }
 
@@ -366,6 +451,7 @@ export function createNotebook(name: string) {
     name: name.trim() || 'Notebook',
     createdAt: now,
     updatedAt: now,
+    shelfId: shelfId === FIRST_SHELF_ID ? undefined : shelfId,
   };
 
   saveNotebooks([notebook, ...getNotebooks()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));

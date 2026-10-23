@@ -2,6 +2,7 @@ import React from 'react';
 import {
   GestureResponderEvent,
   Image,
+  ImageStyle,
   ImageSourcePropType,
   Pressable,
   StyleProp,
@@ -14,7 +15,7 @@ type Props = {
   accessibilityLabel: string;
   onPress?: (event: GestureResponderEvent) => void;
   style?: StyleProp<ViewStyle>;
-  imageStyle?: StyleProp<ViewStyle>;
+  imageStyle?: StyleProp<ImageStyle>;
   disabled?: boolean;
   testID?: string;
 };

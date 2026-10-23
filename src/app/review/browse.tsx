@@ -537,7 +537,7 @@ export default function BrowseDecksScreen() {
                 onPress={() => setPreviewExpanded((value) => !value)}
                 style={({ pressed }) => [styles.previewHeader, { width: contentWidth, backgroundColor: selectedPreviewFill }, pressed && styles.pressed]}
               >
-                <Image pointerEvents="none" source={selectedCrayonTexture} resizeMode="stretch" style={styles.previewSwatchFill} />
+                <Image source={selectedCrayonTexture} resizeMode="stretch" style={styles.previewSwatchFill} />
                 <View style={styles.previewHeaderPanel}>
                   <View style={styles.previewHeaderLeft}>
                     <Image source={folioReviewAssets.bottomNav.reviewIconInactive} resizeMode="contain" style={styles.previewCardsIcon} />
@@ -895,6 +895,7 @@ const styles = StyleSheet.create({
   previewSwatchFill: {
     ...StyleSheet.absoluteFillObject,
     height: '100%',
+    pointerEvents: 'none',
     width: '100%',
     zIndex: 0,
   },

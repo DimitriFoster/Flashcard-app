@@ -214,7 +214,6 @@ export function SessionFlowStrip({ tokens, activeIndex, layoutScale = 1, placeme
           {placementGrade ? (
             <>
               <Animated.Image
-                pointerEvents="none"
                 source={placementSource ?? folioReviewAssets.sessionFlow.good}
                 resizeMode="contain"
                 style={[
@@ -361,6 +360,7 @@ const styles = StyleSheet.create({
   },
   motionGhostToken: {
     left: 0,
+    pointerEvents: 'none',
     position: 'absolute',
     top: 3,
   },

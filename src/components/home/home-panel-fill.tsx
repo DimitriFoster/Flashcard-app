@@ -9,7 +9,6 @@ type HomePanelFillProps = {
 export function HomePanelFill({ source, opacity = 1 }: HomePanelFillProps) {
   return (
     <Image
-      pointerEvents="none"
       source={source}
       resizeMode="cover"
       fadeDuration={0}
@@ -21,6 +20,7 @@ export function HomePanelFill({ source, opacity = 1 }: HomePanelFillProps) {
 const styles = StyleSheet.create({
   fill: {
     ...StyleSheet.absoluteFillObject,
+    pointerEvents: 'none',
     width: undefined,
     height: undefined,
   },
