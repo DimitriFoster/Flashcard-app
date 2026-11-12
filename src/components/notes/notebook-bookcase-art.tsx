@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Image, StyleSheet, View, type ImageSourcePropType } from 'react-native';
+import { getNotebookAppearance, type NotebookCoverKey } from '@/lib/notebook-appearance';
 
 type Artwork = {
   source: ImageSourcePropType;
@@ -26,16 +27,16 @@ const plaque: Artwork = {
 const cover = (source: ImageSourcePropType, x: number, y: number, width: number, height: number): Artwork => ({
   source, sourceWidth: 1254, sourceHeight: 1254, window: { x, y, width, height },
 });
-const covers = [
-  cover(require('./assets/bookcase/cover-ideas.png'), 222, 150, 810, 981),
-  cover(require('./assets/bookcase/cover-flowers.png'), 200, 126, 854, 1033),
-  cover(require('./assets/bookcase/cover-clouds.png'), 224, 149, 820, 988),
-  cover(require('./assets/bookcase/cover-sun.png'), 227, 175, 801, 928),
-  cover(require('./assets/bookcase/cover-moon.png'), 265, 199, 744, 907),
-  cover(require('./assets/bookcase/cover-feather.png'), 209, 150, 838, 1005),
-  cover(require('./assets/bookcase/cover-leaves.png'), 251, 184, 755, 929),
-  cover(require('./assets/bookcase/cover-checklist.png'), 202, 151, 861, 977),
-];
+const covers: Record<NotebookCoverKey, Artwork> = {
+  ideas: cover(require('./assets/bookcase/cover-ideas.png'), 222, 150, 810, 981),
+  flowers: cover(require('./assets/bookcase/cover-flowers.png'), 200, 126, 854, 1033),
+  clouds: cover(require('./assets/bookcase/cover-clouds.png'), 224, 149, 820, 988),
+  sun: cover(require('./assets/bookcase/cover-sun.png'), 227, 175, 801, 928),
+  moon: cover(require('./assets/bookcase/cover-moon.png'), 265, 199, 744, 907),
+  feather: cover(require('./assets/bookcase/cover-feather.png'), 209, 150, 838, 1005),
+  leaves: cover(require('./assets/bookcase/cover-leaves.png'), 251, 184, 755, 929),
+  checklist: cover(require('./assets/bookcase/cover-checklist.png'), 202, 151, 861, 977),
+};
 
 // Display windows remove empty export padding in layout only. The supplied PNGs
 // stay untouched; rails and covers retain their proportions and soft edges.
@@ -81,8 +82,6 @@ export function ShelfPlaque({ width }: { width: number }) {
 }
 
 export function NotebookCover({ notebookId, height }: { notebookId: string; height: number }) {
-  let hash = 0;
-  for (const character of notebookId) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  const artwork = covers[hash % covers.length];
+  const artwork = covers[getNotebookAppearance(notebookId).key];
   return <ArtworkWindow artwork={artwork} width={height * artwork.window.width / artwork.window.height} />;
 }

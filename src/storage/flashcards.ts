@@ -7,6 +7,9 @@
 import { Platform } from 'react-native';
 
 import { calculateNextReviewState, getCardState } from '@/lib/review-scheduling';
+import { validateAppBackup } from '@/lib/backup-validation';
+import { validateImportCards, validateImportName } from '@/lib/import-policy';
+import { commitImport, recoverInterruptedImport } from './import-transaction';
 import type {
   Deck,
   Flashcard,
@@ -70,7 +73,9 @@ function parseJsonObject<T>(value: string | undefined): T | undefined {
  * On native, MMKV is available. On web, window must exist first.
  */
 function canUseStorage() {
-  return Platform.OS !== 'web' || typeof window !== 'undefined';
+  const available = Platform.OS !== 'web' || typeof window !== 'undefined';
+  if (available) recoverInterruptedImport(storage);
+  return available;
 }
 
 /**
@@ -456,6 +461,8 @@ function createNewImportedFlashcard(input: NewFlashcard): Flashcard {
 }
 
 export function importParsedCards(cards: ParsedImportCard[], options: ImportCardsOptions): ImportCardsResult {
+  validateImportCards(cards);
+  if (options.newDeckName) validateImportName(options.newDeckName);
   if (!canUseStorage()) {
     throw new Error('Flashcard import is only available on the client.');
   }
@@ -467,8 +474,9 @@ export function importParsedCards(cards: ParsedImportCard[], options: ImportCard
   let targetDeckId = options.existingDeckId;
 
   if (options.mode === 'newDeck') {
-    createdDeck = addDeck({ name: options.newDeckName?.trim() || 'Imported Deck' });
-    decks = getDecks();
+    const now = new Date().toISOString();
+    createdDeck = { id: createId('deck'), name: options.newDeckName?.trim() || 'Imported Deck', createdAt: now, updatedAt: now };
+    decks = [...existingDecks, createdDeck];
     targetDeckId = createdDeck.id;
   }
 
@@ -503,7 +511,7 @@ export function importParsedCards(cards: ParsedImportCard[], options: ImportCard
     const deckId = targetDeckId;
     const duplicateKey = `${deckId}::${front.toLowerCase()}::${back.toLowerCase()}`;
 
-    if (options.mode === 'existingDeck' && options.skipDuplicates && duplicateKeys.has(duplicateKey)) {
+    if (options.skipDuplicates && duplicateKeys.has(duplicateKey)) {
       skippedDuplicates += 1;
       continue;
     }
@@ -513,8 +521,7 @@ export function importParsedCards(cards: ParsedImportCard[], options: ImportCard
   }
 
   const flashcards = [...importedFlashcards, ...getFlashcards()];
-  saveFlashcards(flashcards);
-  clearLastReviewUndo();
+  commitImport(storage, { [DECKS_KEY]: JSON.stringify(decks), [FLASHCARDS_KEY]: JSON.stringify(flashcards), [LAST_REVIEW_UNDO_KEY]: null });
 
   return {
     importedCards: importedFlashcards.length,
@@ -568,11 +575,7 @@ export function importAppBackupText(rawText: string): ImportAppBackupResult | un
   }
 
   try {
-    const parsed = JSON.parse(rawText) as Partial<AppBackup>;
-
-    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.decks) || !Array.isArray(parsed.flashcards)) {
-      return undefined;
-    }
+    const parsed = validateAppBackup(rawText);
 
     const decks = parsed.decks.map(normalizeDeck);
     const flashcards = parsed.flashcards.map(normalizeFlashcard);
@@ -580,12 +583,11 @@ export function importAppBackupText(rawText: string): ImportAppBackupResult | un
     const notes = Array.isArray(parsed.notes) ? parsed.notes : [];
     const notebooks = Array.isArray(parsed.notebooks) ? parsed.notebooks : [];
 
-    saveDecks(decks.length > 0 ? decks : [createDefaultDeck()]);
-    saveFlashcards(flashcards);
-    saveReviewLogs(reviewLogs);
-    storage.set(NOTES_KEY, JSON.stringify(notes));
-    storage.set(NOTEBOOKS_KEY, JSON.stringify(notebooks));
-    clearLastReviewUndo();
+    commitImport(storage, {
+      [DECKS_KEY]: JSON.stringify(decks.length > 0 ? decks : [createDefaultDeck()]),
+      [FLASHCARDS_KEY]: JSON.stringify(flashcards), [REVIEW_LOGS_KEY]: JSON.stringify(reviewLogs),
+      [NOTES_KEY]: JSON.stringify(notes), [NOTEBOOKS_KEY]: JSON.stringify(notebooks), [LAST_REVIEW_UNDO_KEY]: null,
+    });
 
     return {
       decks: getDecks(),

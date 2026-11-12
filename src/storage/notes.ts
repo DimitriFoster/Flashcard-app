@@ -7,10 +7,14 @@
  */
 import { Platform } from 'react-native';
 
+import { resolveSavedNotebookId } from '@/lib/note-draft';
+import { normalizePdfAttachment } from '@/lib/pdf-note';
+import { normalizeRichNote } from '@/lib/rich-note';
 import { FIRST_SHELF, FIRST_SHELF_ID, moveNotebooksFromShelf, renameShelfInList, restoreNotebookShelves } from '@/lib/notebook-shelves';
-import type { Notebook, NotebookShelf, SaveNoteInput, StudyNote } from '@/types/note';
+import type { Notebook, NotebookShelf, PdfAttachment, SaveNoteInput, StudyNote } from '@/types/note';
 
 import { storage } from './mmkv';
+import { recoverInterruptedImport } from './import-transaction';
 
 const NOTES_KEY = 'notes';
 const NOTEBOOKS_KEY = 'note-notebooks';
@@ -30,7 +34,9 @@ function parseJsonArray<T>(value: string | undefined): T[] {
 }
 
 function canUseStorage() {
-  return Platform.OS !== 'web' || typeof window !== 'undefined';
+  const available = Platform.OS !== 'web' || typeof window !== 'undefined';
+  if (available) recoverInterruptedImport(storage);
+  return available;
 }
 
 function createId(prefix: string) {
@@ -60,9 +66,11 @@ function normalizeNote(note: Partial<StudyNote>): StudyNote {
     id: note.id ?? createId('note'),
     title: note.title?.trim() || createTitle(body),
     body,
+    ...(note.kind !== 'pdf' ? { richText: normalizeRichNote(note.richText, body) } : {}),
     createdAt: note.createdAt ?? now,
     updatedAt: note.updatedAt ?? now,
     notebookId: note.notebookId,
+    ...(note.kind === 'pdf' ? { kind: 'pdf' as const, pdf: normalizePdfAttachment(note.pdf) } : {}),
   };
 }
 
@@ -234,13 +242,16 @@ export function saveNote(input: SaveNoteInput) {
   const now = new Date().toISOString();
   const notes = getNotes();
   const existingNote = input.id ? notes.find((note) => note.id === input.id) : undefined;
+  const richText = normalizeRichNote(input.richText === undefined && existingNote?.body === body ? existingNote.richText : input.richText, body);
   const nextNote: StudyNote = {
+    ...(existingNote?.kind !== 'pdf' ? { richText } : {}),
+    ...(existingNote?.kind === 'pdf' ? { kind: 'pdf' as const, pdf: existingNote.pdf } : {}),
     id: existingNote?.id ?? input.id ?? createId('note'),
-    title: createTitle(body),
-    body,
+    title: existingNote?.kind === 'pdf' ? existingNote.title : createTitle(body),
+    body: existingNote?.kind === 'pdf' ? existingNote.body : body,
     createdAt: existingNote?.createdAt ?? now,
     updatedAt: now,
-    notebookId: input.notebookId ?? existingNote?.notebookId,
+    notebookId: resolveSavedNotebookId(input, existingNote),
   };
 
   const nextNotes = existingNote
@@ -250,6 +261,23 @@ export function saveNote(input: SaveNoteInput) {
   saveNotes([...nextNotes].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
 
   return nextNote;
+}
+
+export function createPdfNote(attachment: PdfAttachment, notebookId?: string): StudyNote {
+  if (!canUseStorage()) throw new Error('Note storage is only available on the client.');
+  const pdf = normalizePdfAttachment(attachment);
+  if (!pdf) throw new Error('Could not save this PDF. Please try again.');
+  if (notebookId && !getNotebooks().some((book) => book.id === notebookId)) {
+    throw new Error('That notebook is no longer available. Import into Loose notes instead.');
+  }
+  const now = new Date().toISOString();
+  const note: StudyNote = {
+    id: createId('note'), kind: 'pdf', pdf,
+    title: pdf.originalName.replace(/\.pdf$/i, '').trim() || 'Document',
+    body: '', notebookId, createdAt: now, updatedAt: now,
+  };
+  saveNotes([note, ...getNotes()]);
+  return note;
 }
 
 export function deleteNote(id: string) {

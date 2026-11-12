@@ -1,7 +1,8 @@
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { validateAppBackup } from '@/lib/backup-validation';
+import { getDeckFileKind, MAX_IMPORT_BYTES } from '@/lib/import-policy';
+import { pickDeckFile } from '@/storage/deck-import';
 
 import { HomePanelFill } from '@/components/home/home-panel-fill';
 import { getDeckTopicIcon } from '@/lib/deck-topic';
@@ -89,6 +90,8 @@ export function HomeCreateSection({
   const [cardBack, setCardBack] = useState('');
   const [deckName, setDeckName] = useState('');
   const [importText, setImportText] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+  const importBusyRef = useRef(false);
   const [statusMessage, setStatusMessage] = useState('');
   const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handledCreateRequestRef = useRef('');
@@ -226,45 +229,35 @@ export function HomeCreateSection({
   }
 
   function beginImportDeck() {
-    importCardRowsFromText(importText);
+    if (importBusyRef.current) return;
+    try { importCardRowsFromText(importText); }
+    catch (error) { showImportError(error); }
+  }
+
+  function showImportError(error: unknown) {
+    const message = error instanceof Error ? error.message : 'Check the file and try again.';
+    if (Platform.OS === 'web') window.alert(`Could not import: ${message}`);
+    else Alert.alert('Could not import', message);
   }
 
   async function chooseImportFile() {
+    if (importBusyRef.current) return;
+    importBusyRef.current = true;
+    setIsImporting(true);
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        copyToCacheDirectory: true,
-        multiple: false,
-        type: [
-          'text/*',
-          'text/csv',
-          'application/csv',
-          'application/json',
-          'application/vnd.ms-excel',
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ],
-      });
-
-      if (result.canceled) {
-        return;
-      }
-
-      const asset = result.assets?.[0];
-      if (!asset?.uri) {
-        showStatus('Could not read selected file');
-        return;
-      }
-
-      const fileName = asset.name || 'Imported Deck';
-      const lowerName = fileName.toLowerCase();
-
-      if (lowerName.endsWith('.xlsx')) {
-        showStatus('XLSX binary import is not wired yet. Export CSV for now.');
-        return;
-      }
-
-      const rawText = await FileSystem.readAsStringAsync(asset.uri);
-
-      if (lowerName.endsWith('.foliopack') || lowerName.endsWith('.json')) {
+      const asset = await pickDeckFile();
+      if (!asset) return;
+      const { name: fileName, text: rawText } = asset;
+      if (getDeckFileKind(fileName) === 'backup') {
+        const preview = validateAppBackup(rawText);
+        const message = `Restore ${preview.decks.length} decks, ${preview.flashcards.length} cards, and ${preview.notes.length} notes? This replaces your current decks, review history, notes, and notebooks.`;
+        const confirmed = Platform.OS === 'web' ? window.confirm(message) : await new Promise<boolean>((resolve) => {
+          Alert.alert('Replace data with this backup?', message, [
+            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Restore backup', style: 'destructive', onPress: () => resolve(true) },
+          ], { cancelable: true, onDismiss: () => resolve(false) });
+        });
+        if (!confirmed) return;
         const backupResult = onImportBackup(rawText);
         if (backupResult) {
           const deckId = backupResult.decks[0]?.id ?? '';
@@ -278,13 +271,14 @@ export function HomeCreateSection({
           showStatus('Backup imported ✓');
           return;
         }
+        throw new Error('The backup could not be restored. Restart Folio before editing so any interrupted restore can recover.');
       }
 
       const fallbackDeckName = fileName.replace(/\.[^/.]+$/, '') || 'Imported Deck';
       importCardRowsFromText(rawText, fallbackDeckName);
-    } catch {
-      showStatus('Could not import that file');
-    }
+    } catch (error) {
+      showImportError(error);
+    } finally { importBusyRef.current = false; setIsImporting(false); }
   }
 
   function chooseDeck(deckId: string) {
@@ -564,13 +558,19 @@ export function HomeCreateSection({
        <Pressable
             accessibilityRole="button"
             onPress={chooseImportFile}
+            accessibilityLabel="Choose deck import file"
+            testID="deck-import-choose-file"
+            disabled={isImporting}
+            accessibilityState={{ busy: isImporting, disabled: isImporting }}
             style={({ pressed }) => [styles.importChooseFileButton, pressed && styles.pressed]}>
-            <Text style={styles.importChooseFileText}>Choose file from phone</Text>
+            <Text style={styles.importChooseFileText}>{isImporting ? 'Reading file...' : 'Choose file from phone'}</Text>
           </Pressable>
           <Text style={styles.importDropTitle}>Or paste card rows here</Text>
           <TextInput
             multiline
             value={importText}
+            maxLength={MAX_IMPORT_BYTES}
+            editable={!isImporting}
             onChangeText={setImportText}
             placeholder={`front,back\nWhat is RAG?,Retrieval augmented generation`}
             placeholderTextColor="#7E8778"
@@ -595,6 +595,8 @@ export function HomeCreateSection({
         <Pressable
           accessibilityRole="button"
           onPress={beginImportDeck}
+          disabled={isImporting}
+          testID="deck-import-paste"
           style={({ pressed }) => [styles.importButton, pressed && styles.pressed]}>
           <Text style={styles.importButtonText}>Import deck</Text>
           <Image source={importMagicWand} style={styles.importButtonIcon} resizeMode="contain" />

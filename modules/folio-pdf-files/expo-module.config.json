@@ -1,0 +1,5 @@
+{
+  "platforms": ["android", "apple"],
+  "apple": { "modules": ["FolioDeckPickerModule"] },
+  "android": { "modules": ["expo.modules.foliopdffiles.FolioPdfFilesModule"] }
+}

@@ -74,3 +74,4 @@ maestro-debug-output/
 /Flashcard-app-export-*.zip
 /*.zip
 /.folio-backups/
+/modules/*/android/build/

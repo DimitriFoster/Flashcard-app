@@ -1,11 +1,10 @@
 /**
  * Import parsing helpers for CSV / TSV / simple TXT card files.
  *
- * The UI currently accepts pasted file contents so we can support imports without
- * adding native document-picker dependencies yet. The parser is deliberately
- * small and predictable: it extracts front/back/deck fields and lets storage
- * decide where the cards should be saved.
+ * Bounded UTF-8 input from the picker and paste surface share the same parser.
  */
+import { assertImportText, MAX_IMPORT_CARDS, MAX_IMPORT_FIELD, validateImportCards } from './import-policy';
+
 export type ParsedImportCard = {
   front: string;
   back: string;
@@ -31,36 +30,49 @@ function normalizeHeader(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, '').replace(/-/g, '_');
 }
 
-function splitDelimitedLine(line: string, delimiter: string) {
-  const cells: string[] = [];
+function splitDelimitedRows(text: string, delimiter: string) {
+  const rows: string[][] = [];
+  let cells: string[] = [];
   let current = '';
   let inQuotes = false;
-
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index];
-    const nextCharacter = line[index + 1];
-
+  function field() {
+    if (current.length > MAX_IMPORT_FIELD) throw new Error('Keep each field under 16,000 characters.');
+    cells.push(current.trim());
+    current = '';
+    if (cells.length > 32) throw new Error('Import files can have up to 32 columns.');
+  }
+  function row() {
+    field();
+    if (cells.some(Boolean)) rows.push(cells);
+    cells = [];
+    if (rows.length > MAX_IMPORT_CARDS + 1) throw new Error('Import up to 5,000 cards at a time.');
+  }
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    const nextCharacter = text[index + 1];
+    if (current.length > MAX_IMPORT_FIELD) throw new Error('Keep each field under 16,000 characters.');
     if (character === '"') {
       if (inQuotes && nextCharacter === '"') {
         current += '"';
         index += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
+      } else if (inQuotes || !current.trim()) inQuotes = !inQuotes;
+      else current += character;
       continue;
     }
-
     if (character === delimiter && !inQuotes) {
-      cells.push(current.trim());
-      current = '';
+      field();
       continue;
     }
-
+    if ((character === '\n' || character === '\r') && !inQuotes) {
+      row();
+      if (character === '\r' && nextCharacter === '\n') index++;
+      continue;
+    }
     current += character;
   }
-
-  cells.push(current.trim());
-  return cells;
+  if (inQuotes) throw new Error('A quoted field is not closed. Check the CSV and try again.');
+  row();
+  return rows;
 }
 
 function detectDelimiter(text: string) {
@@ -86,7 +98,7 @@ function detectDelimiter(text: string) {
 
 function detectHeader(cells: string[]) {
   const normalized = cells.map(normalizeHeader);
-  return normalized.some((cell) => FRONT_KEYS.has(cell) || BACK_KEYS.has(cell));
+  return normalized.some((cell) => FRONT_KEYS.has(cell)) && normalized.some((cell) => BACK_KEYS.has(cell));
 }
 
 function getColumnIndexes(headerCells: string[]) {
@@ -103,6 +115,7 @@ function getColumnIndexes(headerCells: string[]) {
 }
 
 export function parseCardImportText(rawText: string): ParsedImportResult {
+  assertImportText(rawText);
   const cleanedText = stripBom(rawText).trim();
   const warnings: string[] = [];
 
@@ -116,11 +129,7 @@ export function parseCardImportText(rawText: string): ParsedImportResult {
   }
 
   const { delimiter, format } = detectDelimiter(cleanedText);
-  const rows = cleanedText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => splitDelimitedLine(line, delimiter));
+  const rows = splitDelimitedRows(cleanedText, delimiter);
 
   if (rows.length === 0) {
     return {
@@ -134,6 +143,7 @@ export function parseCardImportText(rawText: string): ParsedImportResult {
   const hasHeader = detectHeader(rows[0]);
   const { frontIndex, backIndex, deckIndex } = getColumnIndexes(hasHeader ? rows[0] : []);
   const dataRows = hasHeader ? rows.slice(1) : rows;
+  if (dataRows.length > MAX_IMPORT_CARDS) throw new Error('Import up to 5,000 cards at a time.');
 
   let skippedRows = 0;
   const cards = dataRows.reduce<ParsedImportCard[]>((nextCards, row) => {
@@ -159,6 +169,7 @@ export function parseCardImportText(rawText: string): ParsedImportResult {
     warnings.push('Header row was detected, but the parser could not confidently map front/back fields.');
   }
 
+  validateImportCards(cards);
   return {
     cards,
     detectedFormat: format,

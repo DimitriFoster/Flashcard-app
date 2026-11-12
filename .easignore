@@ -78,6 +78,7 @@ maestro-debug-output/
 /Flashcard-app-export-*.zip
 /*.zip
 /.folio-backups/
+/modules/*/android/build/
 
 # EAS uploads only assets already tracked by Git; local image experiments stay out.
 /.git

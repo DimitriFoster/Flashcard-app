@@ -9,12 +9,10 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  Animated,
   Image,
   ImageBackground,
   Keyboard,
   KeyboardAvoidingView,
-  PixelRatio,
   Platform,
   Pressable,
   ScrollView,
@@ -28,14 +26,23 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HomePanelFill } from '@/components/home/home-panel-fill';
 import { NotesLanding, type NotesLandingView } from '@/components/notes/notes-landing';
-import { RuledNotebookPaper } from '@/components/notes/ruled-notebook-paper';
+import { LooseNoteCard } from '@/components/notes/loose-note-card';
+import { NoteEditor, type NoteEditorHandle } from '@/components/notes/note-editor';
+import { NoteEditorToolbarDock, NoteEditorToolbarProvider, NoteKeyboardFrame } from '@/components/notes/note-editor-dock';
+import { NotebookPicker } from '@/components/notes/notebook-picker';
+import { OpenNotebook } from '@/components/notes/open-notebook';
+import { PdfAttachmentPanel } from '@/components/notes/pdf-attachment';
+import { PickerSymbol } from '@/components/notes/notebook-picker-art';
 import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/design';
 import { folioReviewAssets } from '@/folio-review/folioReviewAssets';
 import { FOLIO_HAND_FONT } from '@/folio-review/folioFonts';
 import { FIRST_SHELF } from '@/lib/notebook-shelves';
+import { createEditorSaveInput, isNoteDraftDirty } from '@/lib/note-draft';
+import { getNotebookAppearance } from '@/lib/notebook-appearance';
+import { pdfNoteSummary } from '@/lib/pdf-note';
+import { deleteNoteWithAttachment } from '@/storage/pdf-notes';
 import {
   deleteNotebook as deleteStoredNotebook,
-  deleteNote as deleteStoredNote,
   createNotebook,
   createNotebookShelf,
   deleteNotebookShelf,
@@ -49,16 +56,12 @@ import {
   renameNotebook,
   saveNote,
 } from '@/storage/notes';
-import type { Notebook, NotebookShelf, StudyNote } from '@/types/note';
+import type { Notebook, NotebookShelf, RichNoteText, StudyNote } from '@/types/note';
 
 const notesPanelSwatch = require('../../../assets/folio-ui/home-page/swatches/home_notes_panel_swatch.png');
 
-const NOTEBOOK_LINE_HEIGHT = 28;
-const NOTEBOOK_FONT_SIZE = 17;
-const NOTEBOOK_TEXT_TOP_PADDING = 47;
-
 type SortDirection = 'newest' | 'oldest';
-type NoteCardVariant = 'sidebar' | 'overview';
+type NoteCardVariant = 'sidebar' | 'overview' | 'loose';
 
 function formatUpdatedAt(value: string) {
   const date = new Date(value);
@@ -140,7 +143,7 @@ function NoteCardVisual({ note, variant = 'sidebar', isActive = false }: NoteCar
           {note.title}
         </Text>
         <Text numberOfLines={3} style={styles.notebookNotePreview}>
-          {getPreview(note.body)}
+          {note.kind === 'pdf' ? pdfNoteSummary(note) : getPreview(note.body)}
         </Text>
         <Text style={styles.noteListDate}>{formatUpdatedAt(note.createdAt)}</Text>
       </View>
@@ -153,7 +156,7 @@ function NoteCardVisual({ note, variant = 'sidebar', isActive = false }: NoteCar
         {note.title}
       </Text>
       <Text numberOfLines={2} style={styles.noteListPreview}>
-        {getPreview(note.body)}
+        {note.kind === 'pdf' ? pdfNoteSummary(note) : getPreview(note.body)}
       </Text>
       <Text style={styles.noteListDate}>{formatUpdatedAt(note.updatedAt)}</Text>
     </>
@@ -181,33 +184,13 @@ function NoteCard({
   onNotebookNameChange,
   onCreateNotebook,
 }: NoteCardProps) {
-  const showNotebookControls = variant === 'sidebar';
-
-  return (
-    <View
-      style={[
-        variant === 'overview' ? styles.notebookNoteCard : styles.noteListItem,
-        nested && styles.noteListItemNested,
-        isActive && styles.noteListItemActive,
-      ]}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Open note ${note.title}`}
-        onPress={() => onOpen(note)}
-        style={({ pressed }) => [
-          variant === 'overview' ? styles.notebookNotePressArea : styles.notePressArea,
-          pressed && styles.pressed,
-        ]}>
-        <NoteCardVisual note={note} variant={variant} isActive={isActive} />
-      </Pressable>
-
-      {showNotebookControls ? (
+  const notebookControls = variant !== 'overview' ? (
         <>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={currentNotebook ? `Change notebook for ${note.title}` : `Add ${note.title} to a notebook`}
             onPress={() => onToggleNotebookPicker?.(note.id)}
-            style={({ pressed }) => [styles.notebookAssignmentButton, pressed && styles.pressed]}>
+            style={({ pressed }) => [styles.notebookAssignmentButton, variant === 'loose' && styles.looseNotebookControl, pressed && styles.pressed]}>
             <Text numberOfLines={1} ellipsizeMode="tail" style={styles.notebookAssignmentButtonText}>
               {currentNotebook ? `Notebook - ${currentNotebook.name}` : 'Add to notebook'}
             </Text>
@@ -228,6 +211,7 @@ function NoteCard({
                     onPress={() => onAssignNotebook?.(note.id, notebook.id)}
                     style={({ pressed }) => [
                       styles.notebookPickerOption,
+                      variant === 'loose' && styles.looseNotebookControl,
                       isCurrent && styles.notebookPickerOptionCurrent,
                       pressed && styles.pressed,
                     ]}>
@@ -260,7 +244,7 @@ function NoteCard({
                     onChangeText={onNotebookNameChange}
                     placeholder="Notebook name"
                     placeholderTextColor={COLORS.muted}
-                    style={styles.notebookCreateInput}
+                    style={[styles.notebookCreateInput, variant === 'loose' && styles.looseNotebookControl]}
                     value={notebookNameDraft}
                   />
                   <View style={styles.notebookCreateActions}>
@@ -268,14 +252,14 @@ function NoteCard({
                       accessibilityRole="button"
                       accessibilityLabel="Cancel new notebook"
                       onPress={onCancelCreateNotebook}
-                      style={({ pressed }) => [styles.notebookCreateCancel, pressed && styles.pressed]}>
+                      style={({ pressed }) => [styles.notebookCreateCancel, variant === 'loose' && styles.looseNotebookControl, pressed && styles.pressed]}>
                       <Text style={styles.notebookCreateCancelText}>Cancel</Text>
                     </Pressable>
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Create notebook"
                       onPress={() => onCreateNotebook?.(note.id)}
-                      style={({ pressed }) => [styles.notebookCreateSubmit, pressed && styles.pressed]}>
+                      style={({ pressed }) => [styles.notebookCreateSubmit, variant === 'loose' && styles.looseNotebookControl, pressed && styles.pressed]}>
                       <Text style={styles.notebookCreateSubmitText}>Create</Text>
                     </Pressable>
                   </View>
@@ -285,15 +269,37 @@ function NoteCard({
                   accessibilityRole="button"
                   accessibilityLabel={`Create a new notebook for ${note.title}`}
                   onPress={() => onStartCreateNotebook?.(note.id)}
-                  style={({ pressed }) => [styles.newNotebookButton, pressed && styles.pressed]}>
+                  style={({ pressed }) => [styles.newNotebookButton, variant === 'loose' && styles.looseNotebookControl, pressed && styles.pressed]}>
                   <Text style={styles.newNotebookButtonText}>+ New notebook</Text>
                 </Pressable>
               )}
             </View>
           ) : null}
         </>
-      ) : null}
+      ) : null;
 
+  if (variant === 'loose') {
+    return <LooseNoteCard note={note} onOpen={onOpen} onDelete={onDelete}>{notebookControls}</LooseNoteCard>;
+  }
+
+  return (
+    <View
+      style={[
+        variant === 'overview' ? styles.notebookNoteCard : styles.noteListItem,
+        nested && styles.noteListItemNested,
+        isActive && styles.noteListItemActive,
+      ]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Open note ${note.title}`}
+        onPress={() => onOpen(note)}
+        style={({ pressed }) => [
+          variant === 'overview' ? styles.notebookNotePressArea : styles.notePressArea,
+          pressed && styles.pressed,
+        ]}>
+        <NoteCardVisual note={note} variant={variant} isActive={isActive} />
+      </Pressable>
+      {notebookControls}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Delete ${note.title}`}
@@ -309,6 +315,7 @@ type NotesPresentationProps = {
   isEditorOpen: boolean;
   isNotebookOverviewOpen: boolean;
   isKeyboardVisible: boolean;
+  keyboardTop?: number;
   isDirty: boolean;
   landingView: NotesLandingView;
   looseNotes: StudyNote[];
@@ -322,6 +329,7 @@ type NotesPresentationProps = {
   onQuickCaptureChange: (value: string) => void;
   onQuickCaptureSave: () => void;
   onOpenBlankNote: () => void;
+  onPdfImported: (note: StudyNote) => void;
   onOpenNewNotebook: (shelfId?: string) => void;
   onOpenLooseNotes: () => void;
   onOpenNotebooks: () => void;
@@ -335,15 +343,19 @@ type NotesPresentationProps = {
   onLeaveNotes: () => void;
   onBackToNotes: () => void;
   onSaveCurrentNote: () => void;
+  onOpenEditorNotebookPicker: () => void;
+  onChooseEditorNotebook: (notebookId?: string) => void;
+  onCreateEditorNotebook: (name: string) => Notebook | undefined;
   onDeleteSelectedNote: (note: StudyNote) => void;
   renderEditor: () => React.ReactNode;
-  renderNote: (note: StudyNote) => React.ReactNode;
+  renderNote: (note: StudyNote, variant?: 'loose') => React.ReactNode;
 };
 
 function NotesPresentation({
   isDirty,
   isEditorOpen,
   isKeyboardVisible,
+  keyboardTop,
   isNotebookOverviewOpen,
   landingView,
   looseNotes,
@@ -361,12 +373,16 @@ function NotesPresentation({
   onDeleteSelectedNote,
   onLeaveNotes,
   onOpenBlankNote,
+  onPdfImported,
   onOpenLooseNotes,
   onOpenNewNotebook,
   onOpenNotebooks,
   onQuickCaptureChange,
   onQuickCaptureSave,
   onSaveCurrentNote,
+  onOpenEditorNotebookPicker,
+  onChooseEditorNotebook,
+  onCreateEditorNotebook,
   quickCaptureBody,
   renderEditor,
   renderNote,
@@ -376,7 +392,10 @@ function NotesPresentation({
 }: NotesPresentationProps) {
   const insets = useSafeAreaInsets();
   const landingScrollRef = useRef<ScrollView>(null);
+  const [editorWorkspaceHeight, setEditorWorkspaceHeight] = useState(0);
   const isHub = landingView === 'hub';
+  const isLooseLanding = !isEditorOpen && landingView === 'loose';
+  const isTextEditor = isEditorOpen && !isNotebookOverviewOpen && selectedNote?.kind !== 'pdf';
   const landingTitle = isHub
     ? 'Thoughts worth keeping.'
     : landingView === 'loose'
@@ -395,22 +414,33 @@ function NotesPresentation({
   }, [landingSection]);
 
   return (
-    <ImageBackground source={folioReviewAssets.background.pagePaper} resizeMode="cover" imageStyle={styles.pagePaperImage} style={[styles.screen, styles.pageBackground]}>
+    <NoteEditorToolbarProvider>
+    <ImageBackground source={isLooseLanding ? undefined : folioReviewAssets.background.pagePaper} resizeMode="cover" imageStyle={styles.pagePaperImage} style={[styles.screen, styles.pageBackground]}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' && !isTextEditor ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
-        style={styles.screen}>
-        <View style={styles.screenRoot}>
+        style={[styles.screen, isLooseLanding && styles.loosePageBackground]}>
+        <NoteKeyboardFrame keyboardTop={isTextEditor ? keyboardTop : undefined}>
           <View
             style={[
               styles.notesPage,
               {
                 paddingTop: insets.top + 8,
-                paddingBottom: isKeyboardVisible ? Math.max(insets.bottom, 12) : insets.bottom + 18,
+                paddingBottom: isTextEditor ? 0 : isKeyboardVisible ? Math.max(insets.bottom, 12) : insets.bottom + 18,
               },
             ]}>
           {isEditorOpen ? (
             <>
+              {isNotebookOverviewOpen ? (
+                <View style={styles.openNotebookHeader}>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Back to notebooks"
+                    testID="open-notebook-back" onPress={onBackToNotes}
+                    style={({ pressed }) => [styles.notesBackButton, pressed && styles.pressed]}>
+                    <Text style={styles.openNotebookBackText}>{'\u2039'} Notebooks</Text>
+                  </Pressable>
+                  <Image source={folioReviewAssets.header.folioWordmark} accessible={false} resizeMode="contain" style={styles.notesWordmark} />
+                </View>
+              ) : (
               <View style={styles.focusedHeader}>
                 <Pressable
                   accessibilityRole="button"
@@ -421,9 +451,9 @@ function NotesPresentation({
                 </Pressable>
 
                 <View style={styles.focusedHeaderTitle}>
-                  <Text style={styles.focusedEyebrow}>{isNotebookOverviewOpen ? 'NOTEBOOK' : 'FOCUSED EDITOR'}</Text>
-                  <Text numberOfLines={1} style={styles.focusedTitle}>
-                    {isNotebookOverviewOpen ? selectedNotebook?.name ?? 'Notebook' : selectedNote ? 'Edit note' : 'New note'}
+                  <Text style={styles.focusedEyebrow}>{selectedNote?.kind === 'pdf' ? 'PDF ATTACHMENT' : isNotebookOverviewOpen ? 'NOTEBOOK' : 'FOCUSED EDITOR'}</Text>
+                  <Text numberOfLines={isNotebookOverviewOpen ? 1 : 2} style={styles.focusedTitle}>
+                    {selectedNote?.kind === 'pdf' ? 'Your PDF' : isNotebookOverviewOpen ? selectedNotebook?.name ?? 'Notebook' : selectedNote ? 'Edit note' : 'New note'}
                   </Text>
                 </View>
 
@@ -435,26 +465,28 @@ function NotesPresentation({
                         accessibilityLabel={`Delete ${selectedNote.title}`}
                         onPress={() => onDeleteSelectedNote(selectedNote)}
                         style={({ pressed }) => [styles.deleteHeaderButton, pressed && styles.pressed]}>
-                        <Text style={styles.deleteHeaderButtonText}>Delete</Text>
+                        <PickerSymbol name="trash" color={COLORS.danger} />
                       </Pressable>
                     ) : null}
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel="Save note"
+                      accessibilityLabel={selectedNote?.kind === 'pdf' ? 'Save PDF location' : 'Save note'}
                       accessibilityState={{ disabled: !isDirty }}
                       disabled={!isDirty}
                       onPress={onSaveCurrentNote}
                       style={({ pressed }) => [
                         styles.primaryActionButton,
+                        styles.focusedSaveButton,
                         !isDirty && styles.primaryActionButtonDisabled,
                         pressed && styles.pressed,
                       ]}>
                       {isDirty ? <HomePanelFill source={notesPanelSwatch} opacity={1} /> : null}
-                      <Text style={[styles.primaryActionButtonText, !isDirty && styles.primaryActionButtonTextDisabled]}>Save note</Text>
+                      <Text style={[styles.primaryActionButtonText, !isDirty && styles.primaryActionButtonTextDisabled]}>{selectedNote?.kind === 'pdf' ? 'Save location' : 'Save note'}</Text>
                     </Pressable>
                   </View>
                 ) : null}
               </View>
+              )}
 
               {saveStatusMessage ? (
                 <View pointerEvents="none" style={styles.saveStatusPill}>
@@ -462,25 +494,40 @@ function NotesPresentation({
                 </View>
               ) : null}
 
-              <View style={styles.focusedEditorFrame}>{renderEditor()}</View>
+              <View
+                style={styles.focusedEditorWorkspace}
+                onLayout={({ nativeEvent }) => setEditorWorkspaceHeight(nativeEvent.layout.height)}>
+                {!isNotebookOverviewOpen ? (
+                  <NotebookPicker
+                    notebooks={notebookGroups.map((group) => group.notebook)}
+                    selectedNotebookId={selectedNotebook?.id}
+                    availableHeight={editorWorkspaceHeight}
+                    onOpen={onOpenEditorNotebookPicker}
+                    onSelect={onChooseEditorNotebook}
+                    onCreate={onCreateEditorNotebook}
+                  />
+                ) : null}
+                <View style={isNotebookOverviewOpen ? styles.openNotebookWorkspace : [styles.focusedEditorFrame, styles.focusedEditorFrameFlexible,
+                  selectedNote?.kind === 'pdf' && selectedNotebook && { backgroundColor: getNotebookAppearance(selectedNotebook.id).coverColor }]}>{renderEditor()}</View>
+              </View>
             </>
           ) : (
             <>
-              <View style={styles.notesHeader}>
+              <View style={[styles.notesHeader, isLooseLanding && styles.looseHeader]}>
                 <View style={styles.notesHeaderTop}>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={isHub ? 'Back home' : 'Back to Notes'}
                     onPress={isHub ? onLeaveNotes : onBackToHub}
-                    style={({ pressed }) => [styles.homeButton, pressed && styles.pressed]}>
-                    <Text style={styles.homeButtonText}>{isHub ? 'Back home' : '< Notes'}</Text>
+                    style={({ pressed }) => [isLooseLanding ? styles.looseBackButton : styles.homeButton, pressed && styles.pressed]}>
+                    <Text style={isLooseLanding ? styles.openNotebookBackText : styles.homeButtonText}>{isHub ? 'Back home' : isLooseLanding ? '\u2039 Notes' : '< Notes'}</Text>
                   </Pressable>
                   <Image source={folioReviewAssets.header.folioWordmark} resizeMode="contain" style={styles.notesWordmark} />
                 </View>
-                <View style={styles.notesHeaderCopy}>
+                {!isLooseLanding ? <View style={styles.notesHeaderCopy}>
                   <Text style={styles.notesEyebrow}>NOTES</Text>
                   <Text style={styles.notesTitle}>{landingTitle}</Text>
-                </View>
+                </View> : null}
               </View>
 
               {saveStatusMessage ? (
@@ -493,6 +540,8 @@ function NotesPresentation({
                 key={landingSection}
                 ref={landingScrollRef}
                 keyboardShouldPersistTaps="handled"
+                keyboardDismissMode={isLooseLanding ? 'on-drag' : 'none'}
+                testID="notes-landing-scroll"
                 showsVerticalScrollIndicator={!isHub}
                 style={styles.landingScroll}
                 contentContainerStyle={styles.landingScrollContent}>
@@ -506,6 +555,7 @@ function NotesPresentation({
                   onQuickCaptureChange={onQuickCaptureChange}
                   onQuickCaptureSave={onQuickCaptureSave}
                   onNewNote={onOpenBlankNote}
+                  onPdfImported={onPdfImported}
                   onNewNotebook={onOpenNewNotebook}
                   onOpenLooseNotes={onOpenLooseNotes}
                   onOpenNotebooks={onOpenNotebooks}
@@ -522,16 +572,18 @@ function NotesPresentation({
           )}
           </View>
 
-        </View>
+          {isTextEditor ? <NoteEditorToolbarDock keyboardVisible={isKeyboardVisible} /> : null}
+        </NoteKeyboardFrame>
       </KeyboardAvoidingView>
     </ImageBackground>
+    </NoteEditorToolbarProvider>
   );
 }
 
 export default function NotesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width, fontScale } = useWindowDimensions();
+  const { width } = useWindowDimensions();
 
   const [notes, setNotes] = useState<StudyNote[]>([]);
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
@@ -545,20 +597,20 @@ export default function NotesScreen() {
   const [landingView, setLandingView] = useState<NotesLandingView>('hub');
   const [quickCaptureBody, setQuickCaptureBody] = useState('');
   const [body, setBody] = useState('');
+  const [richText, setRichText] = useState<RichNoteText>();
+  const richTextRef = useRef<RichNoteText | undefined>(undefined);
   const [openNotebookPickerNoteId, setOpenNotebookPickerNoteId] = useState<string | null>(null);
   const [isCreatingNotebook, setIsCreatingNotebook] = useState(false);
   const [notebookNameDraft, setNotebookNameDraft] = useState('');
-  const [editorViewportHeight, setEditorViewportHeight] = useState(0);
-  const [editorContentHeight, setEditorContentHeight] = useState(0);
+  const [editorSession, setEditorSession] = useState(0);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [keyboardTop, setKeyboardTop] = useState<number | undefined>();
   const [notebookSortDirection, setNotebookSortDirection] = useState<SortDirection>('newest');
   const [saveStatusMessage, setSaveStatusMessage] = useState('');
   const [isSavedPanelOpen, setIsSavedPanelOpen] = useState(false);
   const [isEmptyNoteWarningVisible, setIsEmptyNoteWarningVisible] = useState(false);
 
-  const editorInputRef = useRef<TextInput | null>(null);
-  const editorScrollRef = useRef<ScrollView | null>(null);
+  const editorInputRef = useRef<NoteEditorHandle | null>(null);
   const bodyRef = useRef('');
   const quickCaptureBodyRef = useRef('');
   const selectedNoteIdRef = useRef<string | undefined>(undefined);
@@ -566,9 +618,6 @@ export default function NotesScreen() {
   const saveStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emptyNoteWarningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const editorScrollY = useRef(new Animated.Value(0)).current;
-  const editorScrollOffsetRef = useRef(0);
-  const editorSelectionRef = useRef({ start: 0, end: 0 });
 
   const [isEditorArmed, setIsEditorArmed] = useState(false);
 
@@ -617,47 +666,8 @@ export default function NotesScreen() {
     [notebookSortDirection, notes, selectedNotebookId]
   );
 
-  const isDirty = selectedNote ? selectedNote.body !== body : body.trim().length > 0;
+  const isDirty = isNoteDraftDirty(selectedNote, body, selectedNotebookId, richText);
   const sidePanelWidth = Math.min(Math.max(width * 0.3, 108), 162);
-  const editorAvailableWidth = isSavedPanelOpen ? width - sidePanelWidth : width;
-  const selectedNotebookDraftName = selectedNotebook
-    ? notebookNameDrafts[selectedNotebook.id] ?? selectedNotebook.name
-    : '';
-  const notebookTitleLength = selectedNotebookDraftName.trim().length;
-  const notebookDisplayTitleLength = Math.max(notebookTitleLength, 'Notebook'.length);
-  const notebookToolButtonSize = Math.max(
-    26,
-    34 - Math.min(Math.max(notebookDisplayTitleLength - 8, 0), 8)
-  );
-  const notebookToolIconSize = Math.max(12, notebookToolButtonSize - 16);
-  const notebookTitleNaturalWidth = Math.max(86, notebookDisplayTitleLength * 8.6 + 22);
-  const notebookTitleEstimatedCharacterWidth = notebookDisplayTitleLength * 0.58;
-  const notebookTitleFontSize = Math.max(
-    9,
-    Math.min(17, (Math.min(notebookTitleNaturalWidth, 224) - 16) / notebookTitleEstimatedCharacterWidth)
-  );
-  const notebookTitleInputWidth = Math.min(224, notebookTitleNaturalWidth);
-  const keyboardScrollPadding = isKeyboardVisible
-    ? Math.min(Math.max(keyboardHeight * 0.72, 128), 280)
-    : 0;
-  const editorBottomPadding = 38;
-  const editorLineHeight = PixelRatio.roundToNearestPixel(NOTEBOOK_LINE_HEIGHT * fontScale);
-  const editorFontSize = PixelRatio.roundToNearestPixel(NOTEBOOK_FONT_SIZE * fontScale);
-
-  function normalizeEditorContentHeight(value: number) {
-    const safeValue = Number.isFinite(value) ? Math.max(value, editorLineHeight) : editorLineHeight;
-    return Math.ceil(safeValue / editorLineHeight) * editorLineHeight;
-  }
-
-  const editorScrollContentHeight = Math.max(
-    editorViewportHeight,
-    editorContentHeight + editorBottomPadding + keyboardScrollPadding
-  );
-  const editorSurfaceHeight = Math.ceil(editorScrollContentHeight / editorLineHeight) * editorLineHeight;
-  const shouldScrollEditor =
-    editorViewportHeight > 0 &&
-    editorScrollContentHeight > editorViewportHeight + editorLineHeight;
-  const shouldAllowEditorScroll = true;
 
   useEffect(() => {
     refreshNotesState();
@@ -667,9 +677,6 @@ export default function NotesScreen() {
     setIsEditorOpen(false);
     setIsSavedPanelOpen(false);
     setIsEditorArmed(false);
-    editorScrollY.setValue(0);
-    editorScrollOffsetRef.current = 0;
-    setEditorContentHeight(0);
     bodyRef.current = '';
     setDraftBody('');
     quickCaptureBodyRef.current = '';
@@ -701,37 +708,28 @@ export default function NotesScreen() {
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
     const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      if (Platform.OS === 'ios') Keyboard.scheduleLayoutAnimation(event);
       setIsKeyboardVisible(true);
-      setKeyboardHeight(event.endCoordinates?.height ?? 0);
+      setKeyboardTop(event.endCoordinates.screenY);
     });
-    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+    const hideSubscription = Keyboard.addListener(hideEvent, (event) => {
+      if (Platform.OS === 'ios') Keyboard.scheduleLayoutAnimation(event);
       setIsKeyboardVisible(false);
-      setKeyboardHeight(0);
-      editorScrollRef.current?.scrollTo({ y: Math.max(editorScrollOffsetRef.current, 0), animated: false });
+      setKeyboardTop(undefined);
     });
+    const frameSubscription = Platform.OS === 'ios'
+      ? Keyboard.addListener('keyboardWillChangeFrame', (event) => {
+        Keyboard.scheduleLayoutAnimation(event);
+        setKeyboardTop(event.endCoordinates.screenY);
+      })
+      : undefined;
 
     return () => {
       showSubscription.remove();
       hideSubscription.remove();
+      frameSubscription?.remove();
     };
   }, []);
-
-  useEffect(() => {
-    if (!shouldScrollEditor && !isKeyboardVisible) {
-      editorScrollY.setValue(0);
-      editorScrollOffsetRef.current = 0;
-    }
-  }, [editorScrollY, isKeyboardVisible, shouldScrollEditor]);
-
-  useEffect(() => {
-    if (!isKeyboardVisible || !isEditorArmed) {
-      return;
-    }
-
-    requestAnimationFrame(() => {
-      keepCaretVisible(editorSelectionRef.current, bodyRef.current, { animated: false });
-    });
-  }, [editorSurfaceHeight, editorViewportHeight, isEditorArmed, isKeyboardVisible, keyboardHeight]);
 
   function refreshNotesState() {
     const nextNotes = getNotes();
@@ -808,6 +806,19 @@ export default function NotesScreen() {
     applyNotebookResult(moveNoteOutOfNotebook(noteId));
   }
 
+  function moveOverviewNoteToLooseNotes(noteId: string) {
+    const note = getNotes().find((item) => item.id === noteId);
+    if (!note) {
+      showSaveStatus('Could not move note');
+      return;
+    }
+    // Use the editor's explicit destination path; the legacy sidebar helper
+    // also prunes empty notebooks, including ones unrelated to this note.
+    saveNote({ id: note.id, body: note.body, notebookId: null });
+    refreshNotesState();
+    showSaveStatus('Moved to Loose notes');
+  }
+
   function createNotebookForNote(noteId: string) {
     const name = notebookNameDraft.trim();
 
@@ -882,8 +893,10 @@ export default function NotesScreen() {
     return true;
   }
 
-  function setDraftBody(value: string) {
+  function setDraftBody(value: string, formatting?: RichNoteText) {
     bodyRef.current = value;
+    richTextRef.current = formatting;
+    setRichText(formatting);
     setBody(value);
   }
 
@@ -945,27 +958,38 @@ export default function NotesScreen() {
     });
   }
 
-  function saveBodyToStorage(bodyToSave: string, options?: { silent?: boolean }) {
-    const currentNoteId = selectedNoteIdRef.current ?? selectedNoteId;
-    const currentNotebookId = selectedNotebookIdRef.current ?? selectedNotebookId;
+  function saveBodyToStorage(bodyToSave: string, options?: { silent?: boolean; commitDestination?: boolean }) {
+    if (bodyToSave !== bodyRef.current) return undefined;
+    const formatting = richTextRef.current;
+    const currentNoteId = selectedNoteIdRef.current;
+    const currentNotebookId = selectedNotebookIdRef.current;
+
+    const storedPdf = currentNoteId ? getNotes().find((note) => note.id === currentNoteId && note.kind === 'pdf') : undefined;
+    if (storedPdf && (!options?.commitDestination || storedPdf.notebookId === currentNotebookId)) {
+      return storedPdf;
+    }
 
     if (!currentNoteId && bodyToSave.trim().length === 0) {
       return undefined;
     }
 
-    const storedExistingNote = currentNoteId
-      ? getNotes().find((note) => note.id === currentNoteId)
-      : undefined;
-    const savedNote = saveNote({
+    if (options?.commitDestination && currentNotebookId && !getNotebooks().some((notebook) => notebook.id === currentNotebookId)) {
+      showSaveStatus('Choose an available notebook');
+      return undefined;
+    }
+    const savedNote = saveNote(createEditorSaveInput({
       id: currentNoteId,
       body: bodyToSave,
-      notebookId: storedExistingNote?.notebookId ?? selectedNote?.notebookId ?? currentNotebookId,
-    });
+      richText: formatting ?? null,
+      notebookId: currentNotebookId,
+      commitDestination: options?.commitDestination ?? false,
+    }));
 
     const refreshed = refreshNotesState();
     const verifiedNote = refreshed.notes.find((note) => note.id === savedNote.id);
 
-    if (!verifiedNote || verifiedNote.body !== bodyToSave) {
+    if (!verifiedNote || verifiedNote.body !== bodyToSave || verifiedNote.richText?.html !== formatting?.html ||
+      (options?.commitDestination && verifiedNote.notebookId !== currentNotebookId)) {
       if (!options?.silent) {
         showSaveStatus('Save failed');
       }
@@ -975,10 +999,10 @@ export default function NotesScreen() {
 
     upsertSavedNoteLocally(verifiedNote);
     setActiveNoteId(verifiedNote.id);
-    setActiveNotebookId(verifiedNote.notebookId);
+    if (options?.commitDestination) setActiveNotebookId(verifiedNote.notebookId);
 
     if (bodyRef.current === bodyToSave) {
-      setDraftBody(verifiedNote.body);
+      setDraftBody(verifiedNote.body, verifiedNote.richText);
     }
 
     if (!options?.silent) {
@@ -1000,7 +1024,7 @@ export default function NotesScreen() {
     }
 
     autoSaveTimeoutRef.current = setTimeout(() => {
-      saveBodyToStorage(bodyToSave, { silent: true });
+      if (selectedNoteIdRef.current === currentNoteId) saveBodyToStorage(bodyToSave, { silent: true });
     }, 350);
   }
 
@@ -1014,7 +1038,7 @@ export default function NotesScreen() {
       autoSaveTimeoutRef.current = null;
     }
 
-    return saveBodyToStorage(bodyRef.current);
+    return saveBodyToStorage(bodyRef.current, { commitDestination: true });
   }
 
   function shouldPersistCurrentDraft() {
@@ -1043,11 +1067,8 @@ export default function NotesScreen() {
     setIsNotebookOverviewOpen(false);
     setIsEditorOpen(true);
     setIsEditorArmed(false);
-    editorScrollY.setValue(0);
-    editorScrollOffsetRef.current = 0;
-    editorSelectionRef.current = { start: 0, end: 0 };
-    setEditorContentHeight(0);
-    setDraftBody(latestNote.body);
+    setEditorSession((current) => current + 1);
+    setDraftBody(latestNote.body, latestNote.richText);
   }
 
   function openBlankNote() {
@@ -1067,6 +1088,8 @@ export default function NotesScreen() {
     setActiveNotebookId(undefined);
     setIsNotebookOverviewOpen(false);
     setIsEditorOpen(true);
+    setIsEditorArmed(false);
+    setEditorSession((current) => current + 1);
     setDraftBody('');
   }
 
@@ -1082,15 +1105,13 @@ export default function NotesScreen() {
     setIsNotebookOverviewOpen(false);
     setIsEditorOpen(true);
     setIsEditorArmed(false);
-    editorScrollY.setValue(0);
-    editorScrollOffsetRef.current = 0;
-    editorSelectionRef.current = { start: 0, end: 0 };
-    setEditorContentHeight(0);
+    setEditorSession((current) => current + 1);
     setDraftBody('');
   }
 
   function openNotebook(notebook: Notebook) {
     closeNotebookPicker();
+    setLandingView('notebooks');
 
     if (shouldPersistCurrentDraft()) {
       persistCurrentDraft();
@@ -1101,9 +1122,7 @@ export default function NotesScreen() {
     setIsNotebookOverviewOpen(true);
     setIsEditorOpen(true);
     setIsEditorArmed(false);
-    editorScrollY.setValue(0);
-    editorScrollOffsetRef.current = 0;
-    setEditorContentHeight(0);
+    setEditorSession((current) => current + 1);
     setDraftBody('');
   }
 
@@ -1128,6 +1147,13 @@ export default function NotesScreen() {
     openStoredNoteById(note.id, note);
   }
 
+  function onPdfImported(note: StudyNote) {
+    closeNotebookPicker();
+    refreshNotesState();
+    // Import is offered only on collection views, so quick-note drafts stay intact.
+    openStoredNoteById(note.id);
+  }
+
   function handleEditorSurfacePress() {
     /**
      * Opening/selecting a note should not immediately summon the keyboard.
@@ -1141,75 +1167,19 @@ export default function NotesScreen() {
     editorInputRef.current?.focus();
   }
 
-  function keepCaretVisible(
-    selection = editorSelectionRef.current,
-    value = bodyRef.current,
-    options: { animated?: boolean } = {}
-  ) {
-    if (!isKeyboardVisible || !isEditorArmed || editorViewportHeight <= 0) {
-      return;
-    }
-
-    const safeSelection = selection ?? editorSelectionRef.current ?? { start: 0, end: 0 };
-    const selectionEnd = Math.min(Math.max(safeSelection.end ?? 0, 0), value.length);
-    const textBeforeCaret = value.slice(0, selectionEnd);
-    const linesBeforeCaret = textBeforeCaret.split('\n');
-    const explicitLineIndex = Math.max(linesBeforeCaret.length - 1, 0);
-    const currentLineText = linesBeforeCaret[linesBeforeCaret.length - 1] ?? '';
-    const estimatedTextWidth = Math.max(160, editorAvailableWidth - 116);
-    const estimatedCharsPerLine = Math.max(18, Math.floor(estimatedTextWidth / 9));
-    const estimatedSoftWrapRows = Math.floor(currentLineText.length / estimatedCharsPerLine);
-    const estimatedCaretLine = explicitLineIndex + estimatedSoftWrapRows;
-    const caretY = NOTEBOOK_TEXT_TOP_PADDING + (estimatedCaretLine + 1) * editorLineHeight;
-    const visibleTop = editorScrollOffsetRef.current;
-    const safeVisibleBottom =
-      visibleTop + editorViewportHeight - keyboardScrollPadding - editorLineHeight * 2;
-
-    if (caretY <= safeVisibleBottom) {
-      return;
-    }
-
-    const targetY =
-      caretY - (editorViewportHeight - keyboardScrollPadding - editorLineHeight * 3);
-    const maxY = Math.max(0, editorSurfaceHeight - editorViewportHeight);
-    const nextY = Math.min(Math.max(targetY, 0), maxY);
-
-    if (Math.abs(nextY - visibleTop) < 4) {
-      return;
-    }
-
-    editorScrollOffsetRef.current = nextY;
-    editorScrollRef.current?.scrollTo({ y: nextY, animated: options.animated ?? true });
-  }
-
-
-  function handleEditorBodyChange(value: string) {
-    const previousBody = bodyRef.current;
-    const textGrew = value.length > previousBody.length;
-
-    setDraftBody(value);
+  function handleEditorBodyChange(value: string, formatting?: RichNoteText) {
+    setDraftBody(value, formatting);
     scheduleAutoSave(value);
-
-    /**
-     * Keep the caret above the keyboard. When the user is actively adding text,
-     * bias toward pushing the note upward again instead of trapping the cursor
-     * under the keyboard.
-     */
-    requestAnimationFrame(() => {
-      const targetSelection = textGrew
-        ? { start: value.length, end: value.length }
-        : editorSelectionRef.current;
-
-      keepCaretVisible(targetSelection, value, { animated: false });
-    });
   }
 
   function saveCurrentNote() {
     const savedNote = persistCurrentDraft();
 
     if (!savedNote) {
-      pulseEmptyNoteActions();
-      showSaveStatus('Add text first');
+      if (isBlankNewNoteDraft()) {
+        pulseEmptyNoteActions();
+        showSaveStatus('Add text first');
+      }
       return;
     }
 
@@ -1220,7 +1190,21 @@ export default function NotesScreen() {
     setActiveNoteId(savedNote.id);
     setActiveNotebookId(savedNote.notebookId);
     setIsNotebookOverviewOpen(false);
-    setDraftBody(savedNote.body);
+    setDraftBody(savedNote.body, savedNote.richText);
+  }
+
+  function openEditorNotebookPicker() {
+    closeNotebookPicker();
+    editorInputRef.current?.blur();
+    setIsEditorArmed(false);
+    Keyboard.dismiss();
+    refreshNotesState();
+  }
+
+  function createEditorNotebook(name: string) {
+    const notebook = createNotebook(name);
+    if (notebook) refreshNotesState();
+    return notebook;
   }
 
   function restoreEditorFocusIfNeeded(shouldFocus: boolean) {
@@ -1248,6 +1232,17 @@ export default function NotesScreen() {
     restoreEditorFocusIfNeeded(shouldRefocusEditor);
   }
 
+  function discardCurrentDraft() {
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+      autoSaveTimeoutRef.current = null;
+    }
+    const stored = getNotes().find((note) => note.id === selectedNoteIdRef.current);
+    setDraftBody(stored?.body ?? '', stored?.richText);
+    setEditorSession((current) => current + 1);
+    setActiveNotebookId(stored?.notebookId);
+  }
+
   function goHome() {
     closeNotebookPicker();
 
@@ -1261,14 +1256,16 @@ export default function NotesScreen() {
       {
         text: 'Save & leave',
         onPress: () => {
-          persistCurrentDraft();
-          router.replace('/');
+          if (persistCurrentDraft()) router.replace('/');
         },
       },
       {
         text: 'Leave without saving',
         style: 'destructive',
-        onPress: () => router.replace('/'),
+        onPress: () => {
+          discardCurrentDraft();
+          router.replace('/');
+        },
       },
     ]);
   }
@@ -1288,7 +1285,7 @@ export default function NotesScreen() {
       {
         text: 'Save & return',
         onPress: () => {
-          persistCurrentDraft();
+          if (!persistCurrentDraft()) return;
           setIsEditorOpen(false);
           setIsNotebookOverviewOpen(false);
           setIsEditorArmed(false);
@@ -1298,6 +1295,7 @@ export default function NotesScreen() {
         text: 'Discard changes',
         style: 'destructive',
         onPress: () => {
+          discardCurrentDraft();
           setIsEditorOpen(false);
           setIsNotebookOverviewOpen(false);
           setIsEditorArmed(false);
@@ -1312,19 +1310,34 @@ export default function NotesScreen() {
       {
         text: 'Delete note',
         style: 'destructive',
-        onPress: () => {
+        onPress: async () => {
           const wasSelected = note.id === (selectedNoteIdRef.current ?? selectedNoteId);
+          if (wasSelected && autoSaveTimeoutRef.current) {
+            clearTimeout(autoSaveTimeoutRef.current);
+            autoSaveTimeoutRef.current = null;
+          }
+          let result;
+          try {
+            result = await deleteNoteWithAttachment(note.id);
+          } catch {
+            Alert.alert('Could not delete note', 'Please try again.');
+            return;
+          }
+          if (result.deleted) {
+            const refreshed = refreshNotesState();
 
-          if (deleteStoredNote(note.id)) {
-            refreshNotesState();
-
-            if (wasSelected) {
+            if (note.id === selectedNoteIdRef.current || (isNotebookOverviewOpen &&
+                selectedNotebookIdRef.current === selectedNotebookId && !selectedNoteIdRef.current &&
+                !refreshed.notebooks.some((book) => book.id === selectedNotebookId))) {
               setActiveNoteId(undefined);
               setActiveNotebookId(undefined);
               setDraftBody('');
               setIsNotebookOverviewOpen(false);
               setIsEditorOpen(false);
             }
+          }
+          if (result.cleanupFailed) {
+            Alert.alert('PDF cleanup incomplete', 'The note was removed, but its local PDF copy could not be deleted. Please report this to us. Your original file was not changed.');
           }
         },
       },
@@ -1349,6 +1362,8 @@ export default function NotesScreen() {
               setNotebookNameDrafts(createNotebookDrafts(result.notebooks));
               setActiveNotebookId(undefined);
               setIsNotebookOverviewOpen(false);
+              setIsEditorOpen(false);
+              setLandingView('notebooks');
               setActiveNoteId(undefined);
               setDraftBody('');
             }
@@ -1441,100 +1456,22 @@ export default function NotesScreen() {
     }
 
     return (
-      <View style={styles.notebookOverviewPage}>
-        <View style={styles.notebookOverviewHeader}>
-          <View style={styles.notebookOverviewSpacer} />
-
-          <View style={styles.notebookOverviewActions}>
-            <View style={styles.notebookTitleSlot}>
-              <TextInput
-                value={notebookNameDrafts[selectedNotebook.id] ?? selectedNotebook.name}
-                onChangeText={(value) =>
-                  setNotebookNameDrafts((drafts) => ({
-                    ...drafts,
-                    [selectedNotebook.id]: value,
-                  }))
-                }
-                onBlur={() => saveNotebookName(selectedNotebook)}
-                maxLength={36}
-                selectTextOnFocus
-                numberOfLines={1}
-                multiline={false}
-                style={[
-                  styles.notebookOverviewTitle,
-                  {
-                    width: '100%',
-                    maxWidth: notebookTitleInputWidth,
-                    fontSize: notebookTitleFontSize,
-                    lineHeight: notebookTitleFontSize + 3,
-                  },
-                ]}
-              />
-            </View>
-
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Create note in notebook"
-              onPress={() => openBlankNoteInNotebook(selectedNotebook)}
-              style={({ pressed }) => [
-                styles.squareToolButton,
-                { width: notebookToolButtonSize, height: notebookToolButtonSize },
-                pressed && styles.pressed,
-              ]}>
-              <Text style={[styles.squareToolButtonText, { fontSize: notebookToolIconSize }]}>+</Text>
-            </Pressable>
-
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Toggle notebook note sort"
-              onPress={toggleNotebookSortDirection}
-              style={({ pressed }) => [
-                styles.squareToolButton,
-                { width: notebookToolButtonSize, height: notebookToolButtonSize },
-                pressed && styles.pressed,
-              ]}>
-              <Text style={[styles.squareToolButtonText, { fontSize: notebookToolIconSize }]}>
-                {notebookSortDirection === 'newest' ? '↓' : '↑'}
-              </Text>
-            </Pressable>
-
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Delete selected notebook"
-              onPress={() => confirmDeleteNotebook(selectedNotebook)}
-              style={({ pressed }) => [
-                styles.squareTrashButton,
-                { width: notebookToolButtonSize, height: notebookToolButtonSize },
-                pressed && styles.pressed,
-              ]}>
-              <Text style={[styles.squareTrashButtonText, { fontSize: Math.max(12, notebookToolIconSize - 1) }]}>
-                🗑
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <ScrollView
-          nestedScrollEnabled
-          directionalLockEnabled
-          scrollEventThrottle={16}
-          decelerationRate="fast"
-          snapToAlignment="start"
-          snapToInterval={104}
-          keyboardShouldPersistTaps="always"
-          style={styles.notebookOverviewList}
-          contentContainerStyle={styles.notebookOverviewListContent}>
-          {selectedNotebookNotes.length > 0 ? (
-            selectedNotebookNotes.map((note) => renderNoteListItem(note, 'overview'))
-          ) : (
-            <View style={styles.emptyNotebookState}>
-              <Text style={styles.emptyNotesText}>
-                This notebook is empty. Tap + to create a note here.
-              </Text>
-            </View>
-          )}
-        </ScrollView>
-      </View>
+      <OpenNotebook
+        key={selectedNotebook.id}
+        notebook={selectedNotebook}
+        notes={selectedNotebookNotes}
+        nameDraft={notebookNameDrafts[selectedNotebook.id] ?? selectedNotebook.name}
+        sortDirection={notebookSortDirection}
+        onNameChange={(value) => setNotebookNameDrafts((drafts) => ({ ...drafts, [selectedNotebook.id]: value }))}
+        onSaveName={() => saveNotebookName(selectedNotebook)}
+        onToggleSort={toggleNotebookSortDirection}
+        onNewNote={() => openBlankNoteInNotebook(selectedNotebook)}
+        onPdfImported={onPdfImported}
+        onOpenNote={openExistingNote}
+        onDeleteNote={confirmDeleteNote}
+        onRemoveNote={moveOverviewNoteToLooseNotes}
+        onDeleteNotebook={() => confirmDeleteNotebook(selectedNotebook)}
+      />
     );
   }
 
@@ -1543,124 +1480,24 @@ export default function NotesScreen() {
       return renderNotebookOverview();
     }
 
+    if (selectedNote?.kind === 'pdf') {
+      return <PdfAttachmentPanel key={selectedNote.id} note={selectedNote} />;
+    }
+
     return (
-      <Pressable style={styles.notebookPage} onPress={handleEditorSurfacePress}>
-        <View
-          style={styles.editorScrollClip}
-          onLayout={(event) => setEditorViewportHeight(event.nativeEvent.layout.height)}>
-          <ScrollView
-            ref={editorScrollRef}
-            keyboardShouldPersistTaps="always"
-            keyboardDismissMode="none"
-            scrollEnabled={shouldAllowEditorScroll}
-            scrollEventThrottle={16}
-            showsVerticalScrollIndicator={shouldScrollEditor}
-            onScroll={Animated.event(
-              [{ nativeEvent: { contentOffset: { y: editorScrollY } } }],
-              {
-                useNativeDriver: false,
-                listener: (event: any) => {
-                  editorScrollOffsetRef.current = event.nativeEvent.contentOffset.y;
-                },
-              }
-            )}
-            contentContainerStyle={[
-              styles.editorScrollContent,
-              { minHeight: editorViewportHeight },
-            ]}>
-            <View
-              style={[
-                styles.editorScrollContentSurface,
-                {
-                  minHeight: editorViewportHeight,
-                  height: editorSurfaceHeight,
-                },
-              ]}>
-              <RuledNotebookPaper
-                height={editorSurfaceHeight}
-                lineHeight={editorLineHeight}
-                textTop={NOTEBOOK_TEXT_TOP_PADDING}
-              />
-              {Platform.OS === 'web' ? (
-                <Text
-                  accessible={false}
-                  aria-hidden
-                  importantForAccessibility="no-hide-descendants"
-                  pointerEvents="none"
-                  onLayout={(event) => {
-                    const nextHeight = normalizeEditorContentHeight(
-                      NOTEBOOK_TEXT_TOP_PADDING + event.nativeEvent.layout.height
-                    );
-                    setEditorContentHeight((currentHeight) =>
-                      currentHeight === nextHeight ? currentHeight : nextHeight
-                    );
-                  }}
-                  style={[
-                    styles.editorTextMeasure,
-                    { fontSize: editorFontSize, lineHeight: editorLineHeight },
-                  ]}>
-                  {body || ' '}
-                </Text>
-              ) : null}
-              <TextInput
-                ref={editorInputRef}
-                allowFontScaling={false}
-                multiline
-                scrollEnabled={false}
-                onContentSizeChange={Platform.OS === 'web' ? undefined : (event) => {
-                  const nextHeight = normalizeEditorContentHeight(event.nativeEvent.contentSize.height);
-                  setEditorContentHeight((currentHeight) =>
-                    currentHeight === nextHeight ? currentHeight : nextHeight
-                  );
-                }}
-                editable={isEditorArmed}
-                pointerEvents={isEditorArmed ? 'auto' : 'none'}
-                showSoftInputOnFocus={isEditorArmed}
-                value={body}
-                onChangeText={handleEditorBodyChange}
-                onSelectionChange={(event) => {
-                  const nextSelection =
-                    event.nativeEvent?.selection ?? editorSelectionRef.current ?? { start: 0, end: 0 };
-
-                  editorSelectionRef.current = nextSelection;
-
-                  if (isKeyboardVisible) {
-                    requestAnimationFrame(() => {
-                      keepCaretVisible(nextSelection, bodyRef.current, {
-                        animated: false,
-                      });
-                    });
-                  }
-                }}
-                onBlur={() => {
-                  setIsEditorArmed(false);
-                  setIsKeyboardVisible(false);
-                  setKeyboardHeight(0);
-                }}
-                onPressIn={handleEditorSurfacePress}
-                placeholder={
-                  selectedNotebook ? `New note in ${selectedNotebook.name}...` : 'Start writing...'
-                }
-                placeholderTextColor={COLORS.muted}
-                selectionColor={COLORS.note}
-                style={[
-                  styles.editorInput,
-                  {
-                    minHeight: editorViewportHeight,
-                    height: editorSurfaceHeight,
-                    fontSize: editorFontSize,
-                    lineHeight: editorLineHeight,
-                    paddingBottom: editorBottomPadding,
-                  },
-                  !isEditorArmed && styles.editorInputUnarmed,
-                ]}
-                textAlignVertical="top"
-              />
-            </View>
-          </ScrollView>
-        </View>
-
-        <View pointerEvents="none" style={styles.bindingShadow} />
+      <View style={styles.notebookPage}>
+        <NoteEditor
+          key={editorSession}
+          inputRef={editorInputRef}
+          value={body}
+          richText={richText}
+          armed={isEditorArmed}
+          keyboardTop={keyboardTop}
+          onChangeText={handleEditorBodyChange}
+          onSurfacePress={handleEditorSurfacePress}
+          onBlur={() => setIsEditorArmed(false)}
+          placeholder={selectedNotebook ? `New note in ${selectedNotebook.name}...` : 'Start writing...'}
+        />
 
         {selectedNote && !isEditorOpen ? (
           <Pressable
@@ -1671,7 +1508,7 @@ export default function NotesScreen() {
             <Text style={styles.editorDeleteButtonText}>🗑</Text>
           </Pressable>
         ) : null}
-      </Pressable>
+      </View>
     );
   }
 
@@ -1828,6 +1665,7 @@ export default function NotesScreen() {
       isEditorOpen={isEditorOpen}
       isNotebookOverviewOpen={isNotebookOverviewOpen}
       isKeyboardVisible={isKeyboardVisible}
+      keyboardTop={keyboardTop}
       isDirty={isDirty}
       landingView={landingView}
       looseNotes={looseNotes}
@@ -1841,6 +1679,7 @@ export default function NotesScreen() {
       onQuickCaptureChange={setQuickCaptureDraft}
       onQuickCaptureSave={saveQuickCapture}
       onOpenBlankNote={openBlankNote}
+      onPdfImported={onPdfImported}
       onOpenNewNotebook={(shelfId) => {
         setNewNotebookShelfId(shelfId);
         setLandingView('new-notebook');
@@ -1860,6 +1699,9 @@ export default function NotesScreen() {
       onLeaveNotes={goHome}
       onBackToNotes={goBackToNotes}
       onSaveCurrentNote={saveCurrentNote}
+      onOpenEditorNotebookPicker={openEditorNotebookPicker}
+      onChooseEditorNotebook={setActiveNotebookId}
+      onCreateEditorNotebook={createEditorNotebook}
       onDeleteSelectedNote={confirmDeleteNote}
       renderEditor={renderEditor}
       renderNote={renderNoteListItem}
@@ -1868,6 +1710,29 @@ export default function NotesScreen() {
 }
 
 const styles = StyleSheet.create({
+  looseNotebookControl: { minHeight: 48 },
+  loosePageBackground: { backgroundColor: '#FFF8EE' },
+  looseHeader: { minHeight: 48, marginBottom: 0, paddingHorizontal: 12 },
+  looseBackButton: { minHeight: 48, minWidth: 90, borderRadius: 26, borderWidth: 1, borderColor: '#69513F', paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center' },
+  openNotebookHeader: {
+    minHeight: 52,
+    marginBottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 5,
+  },
+  openNotebookBackText: { fontFamily: FOLIO_HAND_FONT, color: '#49372C', fontSize: 13 },
+  openNotebookWorkspace: { flex: 1, minHeight: 0, paddingHorizontal: 3 },
+  focusedEditorWorkspace: {
+    flex: 1,
+    minHeight: 0,
+    position: 'relative',
+  },
+  focusedEditorFrameFlexible: {
+    minHeight: 0,
+  },
   pageBackground: {
     overflow: 'hidden',
   },
@@ -2023,7 +1888,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   notesBackButton: {
-    minHeight: 40,
+    minHeight: 48,
     minWidth: 76,
     flexShrink: 0,
     borderRadius: RADIUS.pill,
@@ -2063,6 +1928,9 @@ const styles = StyleSheet.create({
     gap: 5,
     flexShrink: 0,
   },
+  focusedSaveButton: {
+    minHeight: 48,
+  },
   primaryActionButton: {
     position: 'relative',
     overflow: 'hidden',
@@ -2090,19 +1958,15 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
   },
   deleteHeaderButton: {
-    minHeight: 40,
+    minHeight: 48,
+    minWidth: 48,
     borderRadius: RADIUS.pill,
-    paddingHorizontal: 10,
+    paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.dangerSoft,
     borderColor: COLORS.dangerCrayon,
     borderWidth: 1,
-  },
-  deleteHeaderButtonText: {
-    color: COLORS.danger,
-    fontSize: 11,
-    fontWeight: '900',
   },
   focusedEditorFrame: {
     flex: 1,
@@ -2758,27 +2622,6 @@ const styles = StyleSheet.create({
     borderColor: COLORS.line,
     borderWidth: 1,
   },
-  editorScrollClip: {
-    flex: 1,
-    overflow: 'hidden',
-  },
-  editorScrollContent: {
-    flexGrow: 1,
-  },
-  editorScrollContentSurface: {
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  bindingShadow: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    width: 12,
-    backgroundColor: 'rgba(42, 36, 31, 0.035)',
-    borderRightColor: 'rgba(42, 36, 31, 0.055)',
-    borderRightWidth: 1,
-  },
   editorDeleteButton: {
     position: 'absolute',
     top: 10,
@@ -2797,28 +2640,6 @@ const styles = StyleSheet.create({
     color: COLORS.danger,
     fontSize: 14,
     fontWeight: '900',
-  },
-  editorInput: {
-    flex: 1,
-    color: COLORS.ink,
-    backgroundColor: 'transparent',
-    padding: 0,
-    paddingTop: NOTEBOOK_TEXT_TOP_PADDING,
-    paddingLeft: 24,
-    paddingRight: 24,
-    fontWeight: '500',
-    includeFontPadding: false,
-  },
-  editorTextMeasure: {
-    position: 'absolute',
-    top: NOTEBOOK_TEXT_TOP_PADDING,
-    left: 24,
-    right: 24,
-    opacity: 0,
-    fontWeight: '500',
-  },
-  editorInputUnarmed: {
-    color: COLORS.ink,
   },
   pressed: {
     opacity: 0.9,

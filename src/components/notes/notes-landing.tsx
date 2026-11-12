@@ -1,9 +1,11 @@
 import React from 'react';
-import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { HomePanelFill } from '@/components/home/home-panel-fill';
 import { NotebookBookcase } from '@/components/notes/notebook-bookcase';
-import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/design';
+import { LooseNotesPage } from '@/components/notes/loose-notes-page';
+import { PdfImportButton } from '@/components/notes/pdf-attachment';
+import { COLORS, RADIUS, SHADOWS } from '@/constants/design';
 import { FOLIO_HAND_FONT } from '@/folio-review/folioFonts';
 import type { Notebook, NotebookShelf, StudyNote } from '@/types/note';
 
@@ -29,6 +31,7 @@ type NotesLandingProps = {
   onQuickCaptureChange: (value: string) => void;
   onQuickCaptureSave: () => void;
   onNewNote: () => void;
+  onPdfImported: (note: StudyNote) => void;
   onNewNotebook: (shelfId?: string) => void;
   onOpenLooseNotes: () => void;
   onOpenNotebooks: () => void;
@@ -38,7 +41,7 @@ type NotesLandingProps = {
   onDeleteShelf: (shelfId: string) => boolean;
   onMoveNotebook: (notebookId: string, shelfId: string) => boolean;
   onOpenNotebook: (notebook: Notebook) => void;
-  renderNote: (note: StudyNote) => React.ReactNode;
+  renderNote: (note: StudyNote, variant?: 'loose') => React.ReactNode;
 };
 
 function countLabel(count: number, noun: string) {
@@ -55,6 +58,7 @@ export function NotesLanding({
   onQuickCaptureChange,
   onQuickCaptureSave,
   onNewNote,
+  onPdfImported,
   onNewNotebook,
   onOpenLooseNotes,
   onOpenNotebooks,
@@ -104,6 +108,7 @@ export function NotesLanding({
           </Pressable>
         </View>
 
+        <PdfImportButton onImported={onPdfImported} />
         <View style={styles.browseArea}>
           <View style={styles.browseHeading}>
             <Text style={styles.sectionLabel}>PICK UP WHERE YOU LEFT OFF</Text>
@@ -141,63 +146,11 @@ export function NotesLanding({
   }
 
   if (view === 'loose') {
-    const canSaveQuickNote = Boolean(quickCaptureBody.trim());
-
     return (
-      <View style={styles.collection} testID="notes-loose-list">
-        <View style={styles.collectionHeading}>
-          <View style={styles.collectionHeadingCopy}>
-            <Text style={styles.sectionLabel}>THE LOOSE LEAVES</Text>
-            <Text style={styles.collectionDescription}>Little thoughts, all in one place.</Text>
-          </View>
-          <Pressable
-            accessibilityLabel="New Note"
-            accessibilityRole="button"
-            onPress={onNewNote}
-            style={({ pressed }) => [styles.smallAction, pressed && styles.pressed]}>
-            <Text style={styles.smallActionText}>+ New Note</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.quickCaptureCard}>
-          <Text style={styles.sectionLabel}>QUICK NOTE</Text>
-          <TextInput
-            accessibilityLabel="Quick note capture"
-            multiline
-            onChangeText={onQuickCaptureChange}
-            placeholder="Jot something down..."
-            placeholderTextColor={COLORS.muted}
-            style={styles.quickCaptureInput}
-            textAlignVertical="top"
-            testID="notes-quick-capture"
-            value={quickCaptureBody}
-          />
-          <View style={styles.quickCaptureFooter}>
-            <Text style={styles.quickCaptureHint}>A small thought is enough.</Text>
-            <Pressable
-              accessibilityLabel="Save quick note"
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !canSaveQuickNote }}
-              disabled={!canSaveQuickNote}
-              onPress={onQuickCaptureSave}
-              style={({ pressed }) => [styles.saveQuickButton, !canSaveQuickNote && styles.saveQuickDisabled, pressed && styles.pressed]}
-              testID="notes-quick-save">
-              {canSaveQuickNote ? <HomePanelFill source={notesSwatch} /> : null}
-              <Text style={styles.saveQuickText}>Save note</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <Text style={styles.listLabel}>{countLabel(looseNotes.length, 'loose note')}</Text>
-        <View style={styles.list}>
-          {looseNotes.length ? looseNotes.map(renderNote) : (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>A fresh page.</Text>
-              <Text style={styles.emptyCopy}>Your loose notes will gather here. Start with a quick thought above.</Text>
-            </View>
-          )}
-        </View>
-      </View>
+      <LooseNotesPage notes={looseNotes} body={quickCaptureBody}
+        onPdfImported={onPdfImported}
+        onChange={onQuickCaptureChange} onSave={onQuickCaptureSave} onNewNote={onNewNote}
+        renderNote={(note) => renderNote(note, 'loose')} />
     );
   }
 
@@ -279,27 +232,5 @@ const styles = StyleSheet.create({
   smallActionText: { color: COLORS.noteDeep, fontWeight: '900', fontSize: 12 },
   greenAction: { backgroundColor: COLORS.createPaper, borderColor: COLORS.createCrayon },
   greenActionText: { color: COLORS.createDeep },
-  quickCaptureCard: {
-    borderRadius: RADIUS.lg, padding: SPACING.md, backgroundColor: COLORS.notePaper,
-    borderColor: COLORS.noteCrayon, borderWidth: 1, ...SHADOWS.card,
-  },
-  quickCaptureInput: {
-    minHeight: 92, marginTop: 8, borderRadius: RADIUS.md, paddingHorizontal: 12, paddingTop: 12,
-    paddingBottom: 10, backgroundColor: COLORS.panel, borderColor: COLORS.noteLine, borderWidth: 1,
-    color: COLORS.ink, fontSize: 16, lineHeight: 22,
-  },
-  quickCaptureFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 10 },
-  quickCaptureHint: { flex: 1, minWidth: 0, color: COLORS.muted, fontSize: 12, fontWeight: '700' },
-  saveQuickButton: {
-    position: 'relative', overflow: 'hidden', minHeight: 44, borderRadius: RADIUS.md, borderWidth: 1,
-    borderColor: COLORS.noteCrayon, backgroundColor: COLORS.notePaper, paddingHorizontal: 12, justifyContent: 'center',
-  },
-  saveQuickDisabled: { backgroundColor: COLORS.disabled, borderColor: COLORS.line },
-  saveQuickText: { color: COLORS.ink, fontSize: 12, fontWeight: '900' },
-  listLabel: { color: COLORS.noteDeep, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, marginTop: 4 },
-  list: { gap: 10 },
-  emptyState: { minHeight: 106, borderRadius: RADIUS.lg, borderColor: COLORS.line, borderWidth: 1, padding: 18, backgroundColor: COLORS.panel },
-  emptyTitle: { color: COLORS.ink, fontFamily: FOLIO_HAND_FONT, fontSize: 18, lineHeight: 27 },
-  emptyCopy: { color: COLORS.muted, fontSize: 13, lineHeight: 19, marginTop: 4 },
   pressed: { opacity: 0.92, transform: [{ scale: 0.985 }] },
 });

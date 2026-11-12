@@ -36,9 +36,7 @@ function createScreen(overrides = {}) {
     selectedNoteId: NOTE.id,
     selectedNoteIdRef: { current: NOTE.id },
     isEditorArmed: true,
-    editorScrollY: { setValue() {} },
-    editorScrollOffsetRef: { current: 100 },
-    editorSelectionRef: { current: { start: 10, end: 10 } },
+    editorSession: 0,
     ...overrides,
   };
   const events = [];
@@ -56,7 +54,7 @@ function createScreen(overrides = {}) {
     setIsNotebookOverviewOpen(value) { state.isNotebookOverviewOpen = value; },
     setIsEditorOpen(value) { state.isEditorOpen = value; },
     setIsEditorArmed(value) { state.isEditorArmed = value; },
-    setEditorContentHeight(value) { state.editorContentHeight = value; },
+    setEditorSession(update) { state.editorSession = update(state.editorSession); },
     setDraftBody(value) { state.body = value; },
   });
   runInContext(handlerCode, createContext(state));
@@ -72,7 +70,7 @@ test('the highlighted loose note reopens after returning to the list, repeatedly
     assert.equal(screen.state.selectedNoteId, NOTE.id);
     assert.equal(screen.state.body, NOTE.body);
     assert.equal(screen.state.isEditorArmed, false);
-    assert.equal(screen.state.editorScrollOffsetRef.current, 0);
+    assert.equal(screen.state.editorSession, attempt + 1);
   }
   assert.equal(screen.events.filter((event) => event === 'read-storage').length, 3);
   assert.ok(!screen.events.includes('save'));
@@ -90,6 +88,7 @@ test('tapping the same note while it is open preserves the live editing session'
   screen.open(NOTE);
   assert.equal(screen.state.body, 'Unsaved text');
   assert.equal(screen.state.isEditorArmed, true);
+  assert.equal(screen.state.editorSession, 0);
   assert.deepEqual(screen.events, ['close-picker']);
 });
 

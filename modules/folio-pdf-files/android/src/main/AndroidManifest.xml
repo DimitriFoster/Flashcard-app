@@ -1,0 +1,27 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <data android:mimeType="application/pdf" />
+    </intent>
+  </queries>
+  <application>
+    <activity
+      android:name="expo.modules.foliopdffiles.DeckImportActivity"
+      android:exported="false"
+      android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
+      android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+    <activity
+      android:name="expo.modules.foliopdffiles.PdfImportActivity"
+      android:exported="false"
+      android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
+      android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+    <provider
+      android:name="expo.modules.foliopdffiles.PdfShareProvider"
+      android:authorities="${applicationId}.folio.pdf"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/folio_pdf_paths" />
+    </provider>
+  </application>
+</manifest>
